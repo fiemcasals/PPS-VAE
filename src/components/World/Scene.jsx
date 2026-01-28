@@ -1,11 +1,14 @@
 import { Physics, usePlane } from "@react-three/cannon";
 import React from "react";
 import { Canvas } from "@react-three/fiber";
-import { Sky, ContactShadows } from "@react-three/drei";
 import { CameraController } from "./CameraController";
 import { MapVisualizer } from "./MapVisualizer";
 import { MapEditor } from "./MapEditor";
+import { Environment } from "./Environment";
+import { Grid } from "./Grid";
 import { useStore } from "../../store/useStore";
+
+import { PHYSICS_CONSTANTS } from "../../constants/physics";
 
 function Ground() {
   const [ref] = usePlane(() => ({
@@ -13,7 +16,7 @@ function Ground() {
     position: [0, 0, 0],
     type: "Static",
     // Friction 0 es ideal para que el auto no se "trabe" con el suelo
-    material: { friction: 0.1, restitution: 0 },
+    material: { friction: PHYSICS_CONSTANTS.GROUND_FRICTION, restitution: PHYSICS_CONSTANTS.GROUND_RESTITUTION },
   }));
 
   return (
@@ -36,19 +39,12 @@ export function Scene({ children }) {
       camera={{ position: [20, 20, 20], fov: 45 }}
       style={{ height: "100vh", background: "#050505" }}
     >
-      <Sky sunPosition={[100, 20, 100]} />
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        position={[10, 20, 10]}
-        intensity={1.5}
-        castShadow
-        shadow-mapSize={[1024, 1024]}
-      />
+      <Environment />
 
       {/* CAPA DE EDICIÓN Y GRILLA 
         La grilla visual ahora coincide exactamente con tu lógica de celdas.
       */}
-      <gridHelper args={[ancho_mapa, cantidad_celdas, 0x444444, 0x222222]} />
+      <Grid />
       <MapEditor />
       <MapVisualizer />
 
@@ -56,8 +52,6 @@ export function Scene({ children }) {
         <Ground />
         {children}
       </Physics>
-
-      <ContactShadows opacity={0.5} scale={20} blur={2} far={4.5} />
 
       {/* CONTROLADOR DE CÁMARA
         Le pasamos el modo actual para que sepa si debe dejar de rotar 

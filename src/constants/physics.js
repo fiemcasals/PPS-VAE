@@ -1,0 +1,5 @@
+export const PHYSICS_CONSTANTS = {
+    GRAVITY: [0, -9.81, 0],
+    GROUND_FRICTION: 0.1,
+    GROUND_RESTITUTION: 0,
+};
