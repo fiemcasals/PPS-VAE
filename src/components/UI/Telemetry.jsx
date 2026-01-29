@@ -1,5 +1,6 @@
 import React from "react";
 import { useStore } from "../../store/useStore";
+import { VEHICLE_CONFIG } from "../Vehicle/Physics/vehicleConfig";
 import "./styles/Telemetry.css";
 
 export const Telemetry = () => {
@@ -31,7 +32,7 @@ export const Telemetry = () => {
       <hr style={{ borderColor: "rgba(0, 242, 255, 0.2)" }} />
       <div style={{ fontSize: "12px" }}>
         POTENCIA: {(throttle * 100).toFixed(0)}% <br />
-        GIRO: {(steering * 30).toFixed(1)}° <br />
+        GIRO: {(steering * (VEHICLE_CONFIG.MAX_STEER_ANGLE * 180 / Math.PI)).toFixed(1)}° <br />
         SENTIDO: {direction === 1 ? "DRIVE (D)" : "REVERSE (R)"}
       </div>
     </div>

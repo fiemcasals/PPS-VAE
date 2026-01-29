@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { useStore } from "../../store/useStore";
+import { ScenarioManager } from "./ScenarioManager";
 
 export function EditorToolbar() {
   const [open, setOpen] = useState(false);
+  const [showScenarios, setShowScenarios] = useState(false);
   const { selectedTool, setTool } = useStore();
 
   const tools = [
@@ -63,8 +65,29 @@ export function EditorToolbar() {
               {t.label}
             </button>
           ))}
+          <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+          <button
+            onClick={() => {
+              setShowScenarios(true);
+              setOpen(false);
+            }}
+            style={{
+              padding: "10px 20px",
+              border: "none",
+              cursor: "pointer",
+              background: "white",
+              textAlign: "left",
+            }}
+          >
+            💾 Escenarios
+          </button>
         </div>
       )}
+
+      <ScenarioManager
+        isOpen={showScenarios}
+        onClose={() => setShowScenarios(false)}
+      />
     </div>
   );
 }

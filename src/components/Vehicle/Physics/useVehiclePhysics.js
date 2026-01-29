@@ -47,10 +47,9 @@ export function useVehiclePhysics() {
         }
 
         // 2. Dirección (Steering)
-        // El input 'steering' viene en grados o rango -1 a 1?
-        // Asumimos que viene en grados desde el Joystick (-30 a 30 según useStore)
-        // Convertimos a radianes y limitamos
-        const targetSteer = (steering * Math.PI) / 180;
+        // El input 'steering' viene de -1 a 1 desde el Joystick
+        // Multiplicamos por el ángulo máximo configurado (45 grados)
+        const targetSteer = steering * VEHICLE_CONFIG.MAX_STEER_ANGLE;
 
         // Suavizado del giro de las ruedas
         const steerDiff = targetSteer - state.steeringAngle;

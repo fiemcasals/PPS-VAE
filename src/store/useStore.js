@@ -13,7 +13,7 @@ export const useStore = create((set) => ({
 
   // --- ESTADO DEL VEHÍCULO ---
   controls: { steering: 0, throttle: 0, direction: 1 },
-  vehicleState: { x: 0, y: 0, z: 0, heading: 0, speed: 0 },
+  vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
   cameraMode: "FOLLOW",
   telemetry: { speed: 0, position: [0, 0, 0], acceleration: 0 },
 
@@ -48,4 +48,5 @@ export const useStore = create((set) => ({
     set((state) => ({ telemetry: { ...state.telemetry, ...data } })),
   setCameraMode: (mode) => set({ cameraMode: mode }),
   clearMap: () => set({ gridData: {} }),
+  loadGridData: (data) => set({ gridData: data }),
 }));
