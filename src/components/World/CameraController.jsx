@@ -18,55 +18,115 @@ export function CameraController() {
 
   const isEditing = selectedTool !== "none";
 
-  // Efecto para que el teclado funcione apenas cargues o cambies de herramienta
-  useEffect(() => {
-    const handleFocus = () => {
-      // Forzamos al canvas a capturar el teclado
-      gl.domElement.setAttribute("tabindex", "0");
-      gl.domElement.focus();
-    };
-
-    window.addEventListener("mousedown", handleFocus);
-    return () => window.removeEventListener("mousedown", handleFocus);
-  }, [gl]);
-
-  useFrame((state, delta) => {
-    if (cameraMode !== "FOLLOW" || !vehicleState || isEditing) return;
-
-    // Posición objetivo del auto
-    const carPos = new THREE.Vector3(vehicleState.x, 0, vehicleState.z);
-
-    // Calcular la posición deseada de la cámara (detrás y arriba)
-    // Usamos el heading del auto para posicionarnos detrás
-    const distance = 35;
-    const height = 10;
-
-    // Offset relativo al auto: -sin(heading) para X, -cos(heading) para Z nos pone detrás
-    const cameraOffsetX = -Math.sin(vehicleState.heading) * distance;
-    const cameraOffsetZ = -Math.cos(vehicleState.heading) * distance;
-
-    const targetPosition = new THREE.Vector3(
-      carPos.x + cameraOffsetX,
-      carPos.y + height,
-      carPos.z + cameraOffsetZ,
-    );
-
-    // Interpolación suave (Lerp)
-    // Ajustar el factor 5.0 para más o menos suavidad (más bajo = más suave/lento)
-    currentPosition.current.lerp(targetPosition, delta * 5.0);
-    currentLookAt.current.lerp(carPos, delta * 5.0);
-
-    camera.position.copy(currentPosition.current);
-    camera.lookAt(currentLookAt.current);
+  // Estado para el movimiento manual (WASD)
+  const movement = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
   });
 
-  // Resetear controles cuando cambiamos de modo
+  // Manejador de eventos de teclado
   useEffect(() => {
-    if (cameraMode === "FREE") {
-      // Posición inicial por defecto para modo libre si se desea
-      // camera.position.set(15, 10, 15);
+    const handleKeyDown = (e) => {
+      switch (e.code) {
+        case "KeyW": movement.current.forward = true; break;
+        case "KeyS": movement.current.backward = true; break;
+        case "KeyA": movement.current.left = true; break;
+        case "KeyD": movement.current.right = true; break;
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      switch (e.code) {
+        case "KeyW": movement.current.forward = false; break;
+        case "KeyS": movement.current.backward = false; break;
+        case "KeyA": movement.current.left = false; break;
+        case "KeyD": movement.current.right = false; break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, []);
+
+  // Snap to car when switching to FREE mode
+  useEffect(() => {
+    if (cameraMode === "FREE" || isEditing) {
+      const state = useStore.getState().vehicleState;
+      if (state) {
+        const carPos = new THREE.Vector3(state.x, 0, state.z);
+
+        // Posicionamos la cámara arriba y atrás del auto, pero con control orbital
+        // Mantenemos la altura y distancia actuales si es posible, o reseteamos a unos valores cómodos
+        const offset = new THREE.Vector3(20, 20, 20);
+
+        camera.position.copy(carPos).add(offset);
+        camera.lookAt(carPos);
+
+        if (controlsRef.current) {
+          controlsRef.current.target.copy(carPos);
+          controlsRef.current.update();
+        }
+      }
     }
-  }, [cameraMode, camera]);
+  }, [cameraMode, isEditing, camera]);
+
+  useFrame((state, delta) => {
+    // Lógica de seguimiento (FOLLOW)
+    if (cameraMode === "FOLLOW" && vehicleState && !isEditing) {
+      const carPos = new THREE.Vector3(vehicleState.x, 0, vehicleState.z);
+      const distance = 35;
+      const height = 10;
+      const cameraOffsetX = -Math.sin(vehicleState.heading) * distance;
+      const cameraOffsetZ = -Math.cos(vehicleState.heading) * distance;
+
+      const targetPosition = new THREE.Vector3(
+        carPos.x + cameraOffsetX,
+        carPos.y + height,
+        carPos.z + cameraOffsetZ,
+      );
+
+      currentPosition.current.lerp(targetPosition, delta * 5.0);
+      currentLookAt.current.lerp(carPos, delta * 5.0);
+
+      camera.position.copy(currentPosition.current);
+      camera.lookAt(currentLookAt.current);
+    }
+
+    // Lógica de movimiento manual (WASD) para FREE/EDIT mode
+    if ((cameraMode === "FREE" || isEditing) && controlsRef.current) {
+      const speed = 40 * delta; // Velocidad de movimiento
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      forward.y = 0; // Mantener movimiento en plano XZ
+      forward.normalize();
+
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      right.y = 0;
+      right.normalize();
+
+      const moveDir = new THREE.Vector3();
+
+      if (movement.current.forward) moveDir.add(forward);
+      if (movement.current.backward) moveDir.sub(forward);
+      if (movement.current.right) moveDir.add(right);
+      if (movement.current.left) moveDir.sub(right);
+
+      if (moveDir.lengthSq() > 0) {
+        moveDir.normalize().multiplyScalar(speed);
+
+        // Movemos tanto la cámara como el target del OrbitControls
+        camera.position.add(moveDir);
+        controlsRef.current.target.add(moveDir);
+        controlsRef.current.update();
+      }
+    }
+  });
 
   return (
     <>
@@ -74,23 +134,11 @@ export function CameraController() {
         <OrbitControls
           ref={controlsRef}
           makeDefault
-          listenToKeyEvents={window} // IMPORTANTE: escucha al teclado global
-          // ✅ Si estamos editando, desactivamos rotación (mouse izquierdo)
-          // para que no interfiera con el trazo del camino.
           enableRotate={!isEditing}
-          // ✅ Configuramos las teclas para PAN (desplazamiento lateral)
-          keys={{
-            LEFT: "KeyA", // Tecla A
-            UP: "KeyW", // Tecla W
-            RIGHT: "KeyD", // Tecla D
-            BOTTOM: "KeyS", // Tecla S
-          }}
-          // IMPORTANTE: Para que WASD mueva la cámara lateralmente
+          enablePan={true} // Habilitamos pan con mouse derecho
           screenSpacePanning={true}
-          // Sensibilidad del teclado (puedes ajustarla)
-          keyPanSpeed={20}
           mouseButtons={{
-            LEFT: isEditing ? -1 : THREE.MOUSE.ROTATE, // -1 es desactivado
+            LEFT: isEditing ? -1 : THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.DOLLY,
             RIGHT: THREE.MOUSE.PAN,
           }}
