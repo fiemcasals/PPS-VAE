@@ -9,6 +9,7 @@ import { PhysicsEngine } from "./components/Vehicle/Physics/PhysicsEngine";
 import { EditorToolbar } from "./components/UI/EditorToolbar";
 import { MapVisualizer } from "./components/World/MapVisualizer";
 import { MapEditor } from "./components/World/MapEditor";
+import { AutonomousController } from "./components/Vehicle/AutonomousController";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
       <Scene>
         {/* Lógica de Físicas del Vehículo */}
         <PhysicsEngine />
+        <AutonomousController />
 
         {/* Entidad del Vehículo */}
         <Car />

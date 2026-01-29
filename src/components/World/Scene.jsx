@@ -6,6 +6,7 @@ import { MapVisualizer } from "./MapVisualizer";
 import { MapEditor } from "./MapEditor";
 import { Environment } from "./Environment";
 import { Grid } from "./Grid";
+import { PathVisualizer } from "./PathVisualizer";
 import { useStore } from "../../store/useStore";
 
 import { PHYSICS_CONSTANTS } from "../../constants/physics";
@@ -47,6 +48,7 @@ export function Scene({ children }) {
       <Grid />
       <MapEditor />
       <MapVisualizer />
+      <PathVisualizer />
 
       <Physics gravity={[0, -9.81, 0]} iterations={20}>
         <Ground />

@@ -1,12 +1,11 @@
 import { create } from "zustand";
 
-// Definimos las constantes fuera para poder usarlas en el cálculo de GRID_SIZE
 const ANCHO_MAPA = 1000;
 const CANTIDAD_CELDAS = 500;
-const GRID_SIZE = ANCHO_MAPA / CANTIDAD_CELDAS; // Resultado: 2
+const GRID_SIZE = ANCHO_MAPA / CANTIDAD_CELDAS;
 
 export const useStore = create((set) => ({
-  // --- CONFIGURACIÓN GLOBAL (Leídas por los componentes) ---
+  // --- CONFIGURACIÓN GLOBAL ---
   ancho_mapa: ANCHO_MAPA,
   cantidad_celdas: CANTIDAD_CELDAS,
   GRID_SIZE: GRID_SIZE,
@@ -21,21 +20,29 @@ export const useStore = create((set) => ({
   selectedTool: "none",
   gridData: {},
 
-  // --- ACCIONES ---
-  setTool: (tool) => set({ selectedTool: tool }),
+  // --- CONDUCCIÓN AUTÓNOMA ---
+  isAutonomous: false,
+  currentPath: [],
+  exploredNodes: [], // Nuevo: para ver la nube de puntos de búsqueda
+  targetDestination: null,
 
-  setGridObject: (x, z, type) =>
+  // --- ACCIONES DE EDICIÓN ---
+  setTool: (tool) => set({ selectedTool: tool }),
+  setGridObject: (x, z, type, metadata = {}) =>
     set((state) => {
       const key = `${x},${z}`;
       const newGridData = { ...state.gridData };
       if (type === "none") {
         delete newGridData[key];
       } else {
-        newGridData[key] = { type };
+        newGridData[key] = { type, ...metadata };
       }
       return { gridData: newGridData };
     }),
+  clearMap: () => set({ gridData: {}, currentPath: [], exploredNodes: [] }),
+  loadGridData: (data) => set({ gridData: data }),
 
+  // --- ACCIONES DE VEHÍCULO ---
   setSteering: (val) =>
     set((state) => ({ controls: { ...state.controls, steering: val } })),
   setThrottle: (val) =>
@@ -47,6 +54,10 @@ export const useStore = create((set) => ({
   setTelemetry: (data) =>
     set((state) => ({ telemetry: { ...state.telemetry, ...data } })),
   setCameraMode: (mode) => set({ cameraMode: mode }),
-  clearMap: () => set({ gridData: {} }),
-  loadGridData: (data) => set({ gridData: data }),
+
+  // --- ACCIONES DE NAVEGACIÓN ---
+  setAutonomous: (isActive) => set({ isAutonomous: isActive }),
+  setPath: (path) => set({ currentPath: path }),
+  setExplored: (nodes) => set({ exploredNodes: nodes }),
+  setTargetDestination: (dest) => set({ targetDestination: dest }),
 }));

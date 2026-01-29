@@ -27,11 +27,22 @@ export function MapEditor() {
     const z = (cellZ + 0.5) * GRID_SIZE;
 
     // 2. LÓGICA DE HERRAMIENTA (Pintar o Borrar)
-    // Si la herramienta es 'eraser', mandamos 'none' al store para eliminar el objeto
-    const toolToApply = selectedTool === "eraser" ? "none" : selectedTool;
+    let toolToApply = selectedTool;
+    let metadata = {};
+
+    if (selectedTool === "eraser") {
+      toolToApply = "none";
+    } else if (selectedTool === "destination") {
+      // Para destinos, solo permitimos click (no arrastrar) y pedimos nombre
+      if (e.type !== "pointerdown" || isDragging) return;
+
+      const name = window.prompt("Nombre del destino:", `Destino ${x},${z}`);
+      if (!name) return; // Si cancela, no ponemos nada
+      metadata = { name };
+    }
 
     // 3. ACTUALIZAR STORE
-    setGridObject(x, z, toolToApply);
+    setGridObject(x, z, toolToApply, metadata);
   };
 
   return (

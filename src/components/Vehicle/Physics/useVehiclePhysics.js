@@ -22,8 +22,8 @@ export function useVehiclePhysics() {
         if (throttle > 0) {
             targetSpeed =
                 direction === 1
-                    ? VEHICLE_CONFIG.MAX_SPEED
-                    : -VEHICLE_CONFIG.MAX_REVERSE_SPEED;
+                    ? VEHICLE_CONFIG.MAX_SPEED * throttle
+                    : -VEHICLE_CONFIG.MAX_REVERSE_SPEED * throttle;
         }
 
         // Interpolación lineal simple para la velocidad (Aceleración)
@@ -65,7 +65,7 @@ export function useVehiclePhysics() {
         // Solo giramos si nos movemos (o muy poco) para realismo
         if (Math.abs(state.speed) > 0.1) {
             const angularVelocity = (state.speed / VEHICLE_CONFIG.WHEELBASE) * Math.tan(state.steeringAngle);
-            state.heading -= angularVelocity * delta; // Three.js usa Y+ arriba, rotación antihoraria es positiva usualmente, pero depende del sistema. Ajustar signo si es necesario.
+            state.heading += angularVelocity * delta; // Three.js usa Y+ arriba, rotación antihoraria es positiva usualmente, pero depende del sistema. Ajustar signo si es necesario.
         }
 
         state.x += state.speed * Math.sin(state.heading) * delta;
