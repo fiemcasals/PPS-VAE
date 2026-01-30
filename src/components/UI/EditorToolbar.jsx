@@ -25,6 +25,7 @@ export function EditorToolbar() {
     { id: "destination", label: "🚩 Destino", color: "#ffcc00" },
   ];
 
+  // ... dentro de EditorToolbar ...
   const handleAutoDrive = (destKey) => {
     const dest = gridData[destKey];
     if (!dest) return;
@@ -32,43 +33,37 @@ export function EditorToolbar() {
     const [destX, destZ] = destKey.split(",").map(Number);
     const { vehicleState } = useStore.getState();
 
-    const start = {
-      x: vehicleState.x,
-      z: vehicleState.z,
-      heading: vehicleState.heading
-    };
+    const result = findPath(
+      { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
+      { x: destX, z: destZ },
+      gridData,
+      GRID_SIZE,
+    );
 
-    const goal = { x: destX, z: destZ };
-
-    console.log("Calculando ruta con GRID_SIZE:", GRID_SIZE);
-    
-    // CAMBIO CLAVE: Enviamos GRID_SIZE y recibimos el objeto de resultado
-    const result = findPath(start, goal, gridData, GRID_SIZE);
-
-    if (result && result.path) {
-      console.log("Ruta encontrada:", result.path.length, "pasos");
-      
-      // Actualizamos el store con los nuevos datos
+    if (result.path) {
       setPath(result.path);
-      setExplored(result.explored); 
+      setExplored(result.explored);
       setTargetDestination(dest);
       setAutonomous(true);
-      
-      setShowDestinations(false);
       setOpen(false);
     } else {
-      // Si falla, al menos mostramos la nube de puntos explorados para saber por qué
-      if (result && result.explored) {
-        setExplored(result.explored);
-      }
-      alert("No se pudo encontrar una ruta válida. El vehículo no cabe o el destino está bloqueado.");
+      setExplored(result.explored);
+      console.error("DEBUG INFO: Revisa la nube de puntos rojos en el mapa.");
+      alert(`Fallo en la navegación:
+      - Nodos explorados: ${result.explored.length}
+      - ¿Inicio bloqueado?: Revisa la consola (F12)
+      - Sugerencia: Asegúrate de que el camino sea lo suficientemente ancho para el auto (4.5m x 2m)`);
     }
   };
 
-  const destinations = Object.entries(gridData).filter(([key, val]) => val.type === "destination");
+  const destinations = Object.entries(gridData).filter(
+    ([key, val]) => val.type === "destination",
+  );
 
   return (
-    <div style={{ position: "absolute", top: "20px", left: "20px", zIndex: 1000 }}>
+    <div
+      style={{ position: "absolute", top: "20px", left: "20px", zIndex: 1000 }}
+    >
       <button
         onClick={() => setOpen(!open)}
         style={{
@@ -95,7 +90,7 @@ export function EditorToolbar() {
             display: "flex",
             flexDirection: "column",
             boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            minWidth: "150px"
+            minWidth: "150px",
           }}
         >
           {tools.map((t) => (
@@ -128,7 +123,7 @@ export function EditorToolbar() {
               background: "white",
               textAlign: "left",
               fontWeight: "bold",
-              color: "#007bff"
+              color: "#007bff",
             }}
           >
             🤖 Auto Drive
@@ -137,7 +132,9 @@ export function EditorToolbar() {
           {showDestinations && (
             <div style={{ background: "#f8f9fa", padding: "5px" }}>
               {destinations.length === 0 && (
-                <div style={{ padding: "5px", fontSize: "0.8em", color: "#666" }}>
+                <div
+                  style={{ padding: "5px", fontSize: "0.8em", color: "#666" }}
+                >
                   Sin destinos
                 </div>
               )}
@@ -153,7 +150,7 @@ export function EditorToolbar() {
                     background: "transparent",
                     textAlign: "left",
                     fontSize: "0.9em",
-                    cursor: "pointer"
+                    cursor: "pointer",
                   }}
                 >
                   📍 {val.name || "Destino"}

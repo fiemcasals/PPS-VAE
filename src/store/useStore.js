@@ -59,5 +59,8 @@ export const useStore = create((set) => ({
   setAutonomous: (isActive) => set({ isAutonomous: isActive }),
   setPath: (path) => set({ currentPath: path }),
   setExplored: (nodes) => set({ exploredNodes: nodes }),
+  setExplored: (nodes) => set({ exploredNodes: nodes }),
   setTargetDestination: (dest) => set({ targetDestination: dest }),
+  setTargetPoint: (pt) => set({ targetPoint: pt }),
+  targetPoint: null, // Punto objetivo actual del controlador
 }));

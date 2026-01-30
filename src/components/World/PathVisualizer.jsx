@@ -1,40 +1,41 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useStore } from "../../store/useStore";
-import { Line, Sphere } from "@react-three/drei";
+import { Line } from "@react-three/drei";
 
 export function PathVisualizer() {
-    const currentPath = useStore((state) => state.currentPath) || [];
-    const exploredNodes = useStore((state) => state.exploredNodes) || [];
+  const currentPath = useStore((state) => state.currentPath) || [];
+  const exploredNodes = useStore((state) => state.exploredNodes) || [];
 
-    // Formatear puntos para la línea de Three.js
-    const linePoints = useMemo(() => {
-        if (!Array.isArray(currentPath) || currentPath.length === 0) return null;
-        return currentPath.map(p => [p.x, 0.2, p.z]);
-    }, [currentPath]);
+  return (
+    <group>
+      {/* Nodos explorados: Puntos rojos flotando un poco */}
+      {exploredNodes.length > 0 &&
+        exploredNodes.map(
+          (n, i) =>
+            i % 5 === 0 && ( // Dibujar 1 de cada 5 para no saturar
+              <mesh key={i} position={[n.x, 1, n.z]}>
+                <sphereGeometry args={[0.1, 4, 4]} />
+                <meshBasicMaterial color="red" />
+              </mesh>
+            ),
+        )}
 
-    return (
-        <group>
-            {/* Nube de exploración Dijkstra (Puntos rojos pequeños) */}
-            {Array.isArray(exploredNodes) && exploredNodes.map((n, i) => (
-                // Dibujamos solo 1 de cada 10 para no colapsar el rendimiento
-                i % 10 === 0 && (
-                    <mesh key={`exp-${i}`} position={[n.x, 0.05, n.z]}>
-                        <boxGeometry args={[0.2, 0.01, 0.2]} />
-                        <meshBasicMaterial color="red" opacity={0.2} transparent />
-                    </mesh>
-                )
-            ))}
+      {/* Línea del camino: Verde neón */}
+      {currentPath.length > 0 && (
+        <Line
+          points={currentPath.map((p) => [p.x, 0.6, p.z])}
+          color="#00ff00"
+          lineWidth={5}
+        />
+      )}
 
-            {/* Camino final encontrado (Línea verde) */}
-            {linePoints && (
-                <Line
-                    points={linePoints}
-                    color="#00ff00"
-                    lineWidth={4}
-                    transparent
-                    opacity={0.8}
-                />
-            )}
-        </group>
-    );
+      {/* Blue Dot: Target Point actual del controlador */}
+      {useStore((state) => state.targetPoint) && (
+        <mesh position={[useStore.getState().targetPoint.x, 1.0, useStore.getState().targetPoint.z]}>
+          <sphereGeometry args={[0.3, 8, 8]} />
+          <meshBasicMaterial color="#0000ff" />
+        </mesh>
+      )}
+    </group>
+  );
 }
