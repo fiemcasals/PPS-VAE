@@ -60,10 +60,9 @@ export function AutonomousController() {
             return;
         }
 
-        // --- ADAPTIVE LOOKAHEAD ---
         // Buscar un punto objetivo a X metros de distancia (Lookahead Distance)
         // Esto suaviza la dirección y evita oscilaciones por puntos muy cercanos.
-        const LOOKAHEAD_DIST = 4.5; // Metros (Aumentado para curvas más suaves y anticipadas)
+        const LOOKAHEAD_DIST = 3.0; // Metros (Balanceado: corto para agarre, largo para estabilidad)
         let lookaheadIndex = currentIndex.current;
 
         for (let i = currentIndex.current; i < currentPath.length; i++) {
@@ -134,8 +133,8 @@ export function AutonomousController() {
         }
 
         // Aplicar ganancia proporcional (P-Controller)
-        const Kp = 4.0; // Ganancia alta para respuesta rápida
-        const maxSteer = 0.8; // Ahora 45 grados (coincide con config)
+        const Kp = 8.0; // Ganancia EXTREMA para anular cualquier error
+        const maxSteer = 1.2; // ~70 grados para curvas cerradas
         let newSteer = angleError * Kp;
 
         // Clamp

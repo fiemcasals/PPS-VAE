@@ -7,6 +7,6 @@ export const VEHICLE_CONFIG = {
     ACCELERATION: 4.0,
     BRAKING: 20.0,
     FRICTION: 2.0,
-    TURN_SPEED: 3.0,
-    MAX_STEER_ANGLE: 0.8, // ~45 grados para curvas cerradas
+    TURN_SPEED: 20.0, // MAURI: Respuesta INSTANTÁNEA del volante para eliminar lag
+    MAX_STEER_ANGLE: 1.2, // ~70 grados para curvas muy cerradas (tipo Forklift)
 };

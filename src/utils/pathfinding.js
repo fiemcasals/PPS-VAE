@@ -128,7 +128,9 @@ export function findPath(start, goal, gridData, cellSize) {
                 const nextG = curr.g + moveCost;
 
                 // Añadir penalización por cambio de dirección
-                const dirChangeCost = (curr.direction !== d) ? 1.0 : 0;
+                // MAURI: Penalización MASIVA (1000) para prohibir reversa en maniobras de curva.
+                // Solo usará reversa si es la ÚNICA opción (callejón sin salida).
+                const dirChangeCost = (curr.direction !== d) ? 1000.0 : 0;
 
                 openSet.push(new Node(nextX, nextZ, nextTheta, nextG + dirChangeCost, heuristic({ x: nextX, z: nextZ }, goal), curr, s, d));
             }
