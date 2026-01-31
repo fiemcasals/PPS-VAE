@@ -20,7 +20,7 @@ export function AutonomousController() {
   // Si desactivamos el modo autónomo, reseteamos el índice a 0 para la próxima vez
   useEffect(() => {
     if (!isAutonomous) currentIndex.current = 0;
-  }, [isAutonomous]);
+  }, [isAutonomous]); //el array vacio hace que se ejecute solo una vez al montar el componente, si tiene una variable, se ejecuta cada vez que cambie, puede terner mas deuna
 
   // useFrame corre en cada frame de la simulación (aprox 60fps)
   useFrame(() => {
@@ -39,17 +39,22 @@ export function AutonomousController() {
 
     // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos (0.5m)
     if (nextNode && nextNode.direction !== node.direction) {
-      arrivalThreshold = 0.1; //puse 0.1 para no cambiar de marcha antes de tiempo
+      arrivalThreshold = 0.5; // MAURI: Aumentamos tolerancia (antes 0.1) para asegurar detección
     }
 
     // Si estamos lo suficientemente cerca, pasamos al siguiente punto de la lista
     if (d < arrivalThreshold && bestIndex < currentPath.length - 1) {
       // 1. Miramos si el siguiente punto implica cambiar de marcha
-      //   const willChangeDir = nextNode && nextNode.direction !== node.direction;
-      //   if (willChangeDir) {
-      //     // Aplicamos una velocidad igual a 0, para seguir solo con la inercia
-      //     setThrottle(0);
-      //   }
+      const willChangeDir = nextNode && nextNode.direction !== node.direction;
+      if (willChangeDir) {
+        // MAURI: FIX DE FRENADO
+        // Si hay que cambiar de marcha, NO avanzamos hasta estar QUIETOS.
+        // Tolerancia de velocidad: 0.1 (aprox casi detenido)
+        if (Math.abs(vehicleState.speed) > 0.1) {
+          setThrottle(0);
+          return; // Esperamos frenar dentro del radio de 0.5m
+        }
+      }
 
       bestIndex++;
     }
@@ -88,13 +93,14 @@ export function AutonomousController() {
         break;
       }
 
-      const p = currentPath[i];
+      const p = currentPath[i]; //empieza por el primero que es donde esta el auto, y se va alejando
       const d = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
       if (d >= LOOKAHEAD_DIST) {
+        //busca el optimo, que es el primero que supere el lookahed dist
         lookaheadIndex = i;
         break;
       }
-      lookaheadIndex = i;
+      lookaheadIndex = i; //setea dentro de los evaluados el que mas lejos esta del auto, y no supera lookahed dist
     }
 
     // Este es nuestro "punto objetivo" real hacia el cual vamos a girar

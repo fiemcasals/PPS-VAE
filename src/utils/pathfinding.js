@@ -152,41 +152,71 @@ export async function findPathAsync(
       return { path: smoothPath(rawPath, gridData, cellSize), explored };
     }
 
-    for (const d of [1, -1]) {
-      for (const s of STEER_STEPS) {
-        const steerA = s * VEHICLE_CONFIG.MAX_STEER_ANGLE;
+    // --- EXPANSIÓN DE VECINOS CON TRANSICIÓN RECTA ---
+    const nextMoves = [];
 
-        const beta = (STEP_SIZE / VEHICLE_CONFIG.WHEELBASE) * Math.tan(steerA);
-        // MAURI: Invertimos rotación en A* para coincidir con Physics (Left=+Steer -> Right Turn on Map)
-        const nextTheta = curr.theta - beta * d;
-        const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
-        const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
+    // 1. Lógica de Avance (d: 1)
+    // --- OPCIONES PARA IR HACIA ADELANTE (d: 1) ---
+    if (curr.direction === -1) {
+      // CAMBIO DE MARCHA: Si venía de atrás, para ir adelante...
+      nextMoves.push({ d: 1, s: 0 }); // Opción 1: Salir recto
+      // MAURI FIX: Opción 2: Salir con la misma curva (Retracing) - Permite "V" suaves
+      if (curr.steer !== 0) nextMoves.push({ d: 1, s: curr.steer });
+    } else {
+      // CONTINUIDAD: Si ya venía de adelante, puede usar los 3 giros
+      nextMoves.push({ d: 1, s: STEER_STEPS[0] });
+      nextMoves.push({ d: 1, s: STEER_STEPS[1] });
+      nextMoves.push({ d: 1, s: STEER_STEPS[2] });
+    }
 
-        if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.9))
-          continue;
+    // --- OPCIONES PARA IR HACIA ATRÁS (d: -1) ---
+    if (curr.direction === 1) {
+      // CAMBIO DE MARCHA: Si venía de adelante, para ir atrás...
+      nextMoves.push({ d: -1, s: 0 }); // Opción 1: Salir recto
+      // MAURI FIX: Opción 2: Salir con la misma curva (Retracing)
+      if (curr.steer !== 0) nextMoves.push({ d: -1, s: curr.steer });
+    } else {
+      // CONTINUIDAD: Si ya venía de atrás, puede usar los 3 giros en reversa
+      nextMoves.push({ d: -1, s: STEER_STEPS[0] });
+      nextMoves.push({ d: -1, s: STEER_STEPS[1] });
+      nextMoves.push({ d: -1, s: STEER_STEPS[2] });
+    }
 
-        // MAURI: "Tunnel Vision Config"
-        // Steering Cost 2.5: Forzamos lineas rectas (centro del camino).
-        const moveCost =
-          (d === 1 ? STEP_SIZE : STEP_SIZE * 5.0) + Math.abs(s) * 10;
-        const nextG = curr.g + moveCost;
+    for (const move of nextMoves) {
+      const d = move.d;
+      const s = move.s;
+      const steerA = s * VEHICLE_CONFIG.MAX_STEER_ANGLE;
 
-        // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
-        const dirChangeCost = curr.direction !== d ? 50.0 : 0;
+      const beta = (STEP_SIZE / VEHICLE_CONFIG.WHEELBASE) * Math.tan(steerA);
+      // MAURI: Invertimos rotación en A* para coincidir con Physics (Left=+Steer -> Right Turn on Map)
+      const nextTheta = curr.theta - beta * d;
+      const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
+      const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
 
-        openSet.push(
-          new Node(
-            nextX,
-            nextZ,
-            nextTheta,
-            nextG + dirChangeCost,
-            heuristic({ x: nextX, z: nextZ }, goal),
-            curr,
-            s,
-            d,
-          ),
-        );
-      }
+      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.9))
+        continue;
+
+      // MAURI: "Tunnel Vision Config"
+      // Steering Cost 2.5: Forzamos lineas rectas (centro del camino).
+      const moveCost =
+        (d === 1 ? STEP_SIZE : STEP_SIZE * 10.0) + Math.abs(s) * 10;
+      const nextG = curr.g + moveCost;
+
+      // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
+      const dirChangeCost = curr.direction !== d ? 50.0 : 0;
+
+      openSet.push(
+        new Node(
+          nextX,
+          nextZ,
+          nextTheta,
+          nextG + dirChangeCost,
+          heuristic({ x: nextX, z: nextZ }, goal),
+          curr,
+          s,
+          d,
+        ),
+      );
     }
   }
 
