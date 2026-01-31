@@ -9,6 +9,36 @@ export function ScenarioManager({ isOpen, onClose }) {
     const { scenariosList, saveScenario, loadScenario, deleteScenario } =
         useScenarios();
 
+    // Función para guardar el escenario actual en la memoria del navegador (LocalStorage)
+    // Esta función es parte del hook useScenarios, pero su lógica interna es la siguiente:
+    // 1. Verifica que el nombre del escenario no esté vacío.
+    // 2. Obtiene el estado actual del diseño (gridData) directamente del store de Zustand.
+    // 3. Crea un objeto de escenario con un ID único, el nombre, la fecha de última modificación y el gridData.
+    // 4. Añade el nuevo escenario a la lista de escenarios existentes.
+    // 5. Persiste la lista actualizada de escenarios en el localStorage bajo la clave "vae_scenarios"
+    //    convirtiéndola a una cadena JSON.
+    // 6. Limpia el campo de entrada del nombre del escenario.
+    //
+    // Ejemplo de la lógica de guardado (implementada dentro de useScenarios):
+    /*
+    const saveScenarioLogic = (nameToSave, currentGridData) => {
+        if (!nameToSave.trim()) return;
+
+        const newScenario = {
+            id: Date.now(), // ID único basado en tiempo
+            name: nameToSave,
+            lastModified: new Date().toLocaleString(),
+            gridData: currentGridData, // Guardamos TODO el mapa
+        };
+
+        // Recuperar escenarios existentes, añadir el nuevo y guardar
+        const existingScenarios = JSON.parse(localStorage.getItem("vae_scenarios") || "[]");
+        const updatedScenarios = [...existingScenarios, newScenario];
+        localStorage.setItem("vae_scenarios", JSON.stringify(updatedScenarios));
+        // En el hook, esto también actualizaría el estado interno de scenariosList
+    };
+    */
+
     if (!isOpen) return null;
 
     return (
@@ -88,46 +118,45 @@ export function ScenarioManager({ isOpen, onClose }) {
                 {scenariosList.map((name) => (
                     <div
                         key={name}
+                        onClick={() => {
+                            loadGridData(loadScenario(name));
+                            onClose(); // MAURI: Cerrar menú al elegir
+                        }}
                         style={{
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
                             marginBottom: "5px",
                             background: "#222",
-                            padding: "5px",
+                            padding: "10px",
                             borderRadius: "4px",
+                            cursor: "pointer",
+                            transition: "background 0.2s",
                         }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#333")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#222")}
                     >
-                        <span style={{ fontSize: "0.9em" }}>{name}</span>
-                        <div>
-                            <button
-                                onClick={() => loadGridData(loadScenario(name))}
-                                style={{
-                                    background: "#007bff",
-                                    border: "none",
-                                    color: "white",
-                                    marginRight: "5px",
-                                    cursor: "pointer",
-                                    fontSize: "0.8em",
-                                    padding: "2px 5px",
-                                }}
-                            >
-                                Load
-                            </button>
-                            <button
-                                onClick={() => deleteScenario(name)}
-                                style={{
-                                    background: "#dc3545",
-                                    border: "none",
-                                    color: "white",
-                                    cursor: "pointer",
-                                    fontSize: "0.8em",
-                                    padding: "2px 5px",
-                                }}
-                            >
-                                Del
-                            </button>
-                        </div>
+                        <span style={{ fontSize: "1em", fontWeight: "bold" }}>{name}</span>
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation(); // Evitar cargar al borrar
+                                if (window.confirm(`¿Borrar "${name}"?`)) {
+                                    deleteScenario(name);
+                                }
+                            }}
+                            style={{
+                                background: "#dc3545",
+                                border: "none",
+                                color: "white",
+                                cursor: "pointer",
+                                fontSize: "0.8em",
+                                padding: "5px 10px",
+                                borderRadius: "4px",
+                            }}
+                        >
+                            Del
+                        </button>
                     </div>
                 ))}
             </div>

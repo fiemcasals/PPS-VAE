@@ -11,7 +11,6 @@ export default function Throttle() {
     setThrottle(val);
   };
 
-  // Esta es la parte que faltaba conectar:
   const handleReset = () => {
     console.log("Throttle UI -> Reset a 0");
     setThrottle(0);

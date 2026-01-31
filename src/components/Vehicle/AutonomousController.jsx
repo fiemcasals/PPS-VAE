@@ -3,174 +3,209 @@ import { useFrame } from "@react-three/fiber";
 import { useStore } from "../../store/useStore";
 
 export function AutonomousController() {
-    const {
-        isAutonomous, currentPath, vehicleState,
-        setSteering, setThrottle, setDirection, setAutonomous
-    } = useStore();
+  // Extraemos el estado y las funciones del store global (Zustand)
+  const {
+    isAutonomous,
+    currentPath,
+    vehicleState,
+    setSteering,
+    setThrottle,
+    setDirection,
+    setAutonomous,
+  } = useStore();
 
-    const currentIndex = useRef(0);
+  // Referencia para saber en qué punto de la ruta (índice) estamos actualmente
+  const currentIndex = useRef(0);
 
-    useEffect(() => {
-        if (!isAutonomous) currentIndex.current = 0;
-    }, [isAutonomous]);
+  // Si desactivamos el modo autónomo, reseteamos el índice a 0 para la próxima vez
+  useEffect(() => {
+    if (!isAutonomous) currentIndex.current = 0;
+  }, [isAutonomous]);
 
-    useFrame(() => {
-        if (!isAutonomous || !currentPath || currentPath.length === 0) return;
+  // useFrame corre en cada frame de la simulación (aprox 60fps)
+  useFrame(() => {
+    // Si no está en modo autónomo o no hay ruta, no hacemos nada
+    if (!isAutonomous || !currentPath || currentPath.length === 0) return;
 
-        // --- ACTUALIZACIÓN DE ÍNDICE (Smart Path Tracking) ---
-        // En lugar de chequear solo el siguiente, buscamos el nodo más cercano hacia adelante
-        // Esto permite "saltar" nodos si cortamos camino o nos desviamos.
+    // --- ACTUALIZACIÓN DE ÍNDICE (Seguimiento Secuencial) ---
+    let bestIndex = currentIndex.current;
+    let node = currentPath[bestIndex];
+    // Calculamos la distancia horizontal (hipotenusa) entre el auto y el nodo actual
+    const d = Math.hypot(node.x - vehicleState.x, node.z - vehicleState.z);
 
-        let bestIndex = currentIndex.current;
-        let minDesc = Infinity;
+    // CONDICIONAL DE AVANCE:
+    let nextNode = currentPath[bestIndex + 1];
+    let arrivalThreshold = 2.0; // Distancia por defecto para considerar "llegamos al nodo"
 
-        // Mirar hasta 5 nodos adelante (o fin de ruta)
-        const searchLimit = Math.min(currentIndex.current + 10, currentPath.length - 1);
+    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos (0.5m)
+    if (nextNode && nextNode.direction !== node.direction) {
+      arrivalThreshold = 0.1; //puse 0.1 para no cambiar de marcha antes de tiempo
+    }
 
-        for (let i = currentIndex.current; i <= searchLimit; i++) {
-            const node = currentPath[i];
-            const d = Math.hypot(node.x - vehicleState.x, node.z - vehicleState.z);
-            if (d < minDesc) {
-                minDesc = d;
-                bestIndex = i;
-            }
-        }
+    // Si estamos lo suficientemente cerca, pasamos al siguiente punto de la lista
+    if (d < arrivalThreshold && bestIndex < currentPath.length - 1) {
+      // 1. Miramos si el siguiente punto implica cambiar de marcha
+      //   const willChangeDir = nextNode && nextNode.direction !== node.direction;
+      //   if (willChangeDir) {
+      //     // Aplicamos una velocidad igual a 0, para seguir solo con la inercia
+      //     setThrottle(0);
+      //   }
 
-        // Si el más cercano es uno más adelante, avanzamos. 
-        // Si estamos muy lejos (> 0.5m) del actual target, y hay uno mejor adelante, switch.
-        // Pero cuidado con saltar demasiado rápido.
-        // Simplemente: Si estamos cerca de "bestIndex", usamos ese como base.
-        // Ojo: Si el auto se alejó, minDesc será grande.
+      bestIndex++;
+    }
 
-        // Lógica híbrida: Avanzar si estamos cerca del target actual OR si hemos avanzado más cerca del siguiente.
-        if (bestIndex > currentIndex.current) {
-            currentIndex.current = bestIndex;
-        } else {
-            // Si seguimos en el mismo, verificar si ya llegamos (dist < 1.5)
-            if (minDesc < 1.5 && currentIndex.current < currentPath.length - 1) {
-                currentIndex.current++;
-            }
-        }
+    currentIndex.current = bestIndex;
 
-        // Si llegamos al final final
-        if (currentIndex.current >= currentPath.length - 1 && minDesc < 1.5) {
-            setThrottle(0);
-            setSteering(0);
-            setAutonomous(false);
-            return;
-        }
+    // Si llegamos al final de la ruta y estamos cerca del último punto, frenamos
+    if (currentIndex.current >= currentPath.length - 1 && d < 1.0) {
+      setThrottle(0);
+      setSteering(0);
+      setAutonomous(false); // Apagar modo autónomo
+      return;
+    }
 
-        // Buscar un punto objetivo a X metros de distancia (Lookahead Distance)
-        // Esto suaviza la dirección y evita oscilaciones por puntos muy cercanos.
-        const LOOKAHEAD_DIST = 3.0; // Metros (Balanceado: corto para agarre, largo para estabilidad)
-        let lookaheadIndex = currentIndex.current;
+    // --- LÓGICA DE LOOKAHEAD (Mirar hacia adelante) ---
+    // Buscamos un punto un poco más adelante para que el giro sea suave
+    // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
+    const isManuever = nextNode && nextNode.direction !== node.direction;
+    let LOOKAHEAD_DIST = isManuever ? 0.2 : 2.0;
 
-        for (let i = currentIndex.current; i < currentPath.length; i++) {
-            const p = currentPath[i];
-            const d = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
-            if (d >= LOOKAHEAD_DIST) {
-                lookaheadIndex = i;
-                break;
-            }
-            // Si llegamos al final y no alcanzamos la distancia, usamos el último
-            lookaheadIndex = i;
-        }
+    // Si estamos empezando, miramos más cerca para no saltarnos curvas cerradas iniciales
+    if (currentIndex.current < 5) {
+      LOOKAHEAD_DIST = 1.5;
+    }
 
-        // Actualizar target con el nuevo índice de lookahead
-        const target = currentPath[lookaheadIndex];
+    // 1. Inicializamos el índice de "búsqueda hacia adelante" en la posición actual del auto.
+    let lookaheadIndex = currentIndex.current;
 
-        // VISUAL DEBUG: Marcar el punto objetivo (Blue Dot)
-        useStore.getState().setTargetPoint(target);
+    // 2. Guardamos la dirección de marcha (1 o -1) del nodo donde estamos parados ahora mismo.
+    const currentDir = currentPath[currentIndex.current].direction;
 
-        // Distancia RELATIVA al objetivo (vector)
-        const dx = target.x - vehicleState.x;
-        const dz = target.z - vehicleState.z;
-        const dist = Math.hypot(dx, dz); // Distancia real al target (aprox 4m o menos si es el final)
+    // Recorremos la ruta hacia adelante para encontrar el punto que está a la distancia LOOKAHEAD
+    for (let i = currentIndex.current; i < currentPath.length; i++) {
+      // No podemos mirar puntos que tengan una marcha distinta (ej. no mirar reversa si voy adelante)
+      if (currentPath[i].direction !== currentDir) {
+        break;
+      }
 
-        // --- CONTROL DE MARCHAS Y DIRECCIÓN ---
-        const desiredDir = target.direction || 1;
+      const p = currentPath[i];
+      const d = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
+      if (d >= LOOKAHEAD_DIST) {
+        lookaheadIndex = i;
+        break;
+      }
+      lookaheadIndex = i;
+    }
 
-        // Forzar cambio de marcha si la velocidad es muy baja
-        if (Math.abs(vehicleState.speed) < 1.0) {
-            setDirection(desiredDir);
-        }
+    // Este es nuestro "punto objetivo" real hacia el cual vamos a girar
+    const target = currentPath[lookaheadIndex];
 
-        // Si vamos rápido en dirección contraria -> FRENAR
-        // Aumentamos umbral de 0.5 a 1.5 para evitar "falsos positivos" y jitter
-        const isWrongWay = (vehicleState.speed > 1.5 && desiredDir === -1) ||
-            (vehicleState.speed < -1.5 && desiredDir === 1);
+    // Debug visual: envía el punto al store para dibujar un punto azul en el mapa
+    useStore.getState().setTargetPoint(target);
 
-        if (isWrongWay) {
-            setThrottle(0);
-            setDirection(desiredDir);
-        }
+    // Vector de distancia al objetivo
+    const dx = target.x - vehicleState.x;
+    const dz = target.z - vehicleState.z;
 
-        // Solo acelerar si estamos (más o menos) en la dirección correcta o parados
-        const canAccelerate = !isWrongWay;
+    // --- CONTROL DE MARCHAS Y DIRECCIÓN ---
+    const desiredDir = target.direction || 1; // 1 = Adelante, -1 = Reversa
 
-        // --- PURE PURSUIT CONTROL ---
+    // Si el auto está casi parado, aplicamos el cambio de marcha
+    if (Math.abs(vehicleState.speed) < 0.05) {
+      setDirection(desiredDir);
+    }
 
-        // 1. Calcular ángulo hacia el objetivo
-        let targetAngle = Math.atan2(dx, dz);
+    // Si el auto se mueve rápido pero la marcha deseada es la opuesta, frenamos (isWrongWay)
+    const isWrongWay =
+      (vehicleState.speed > 1.5 && desiredDir === -1) ||
+      (vehicleState.speed < -1.5 && desiredDir === 1);
 
-        // Normalizar ángulo del vehículo (heading)
-        let currentHeading = vehicleState.heading;
+    if (isWrongWay) {
+      setThrottle(0);
+      setDirection(desiredDir);
+    }
 
-        // Lógica de Reversa
-        let virtualHeading = currentHeading;
-        if (desiredDir === -1) {
-            virtualHeading += Math.PI;
-        }
+    const canAccelerate = !isWrongWay;
 
-        // Recalcular error de rumbo
-        let angleError = targetAngle - virtualHeading;
-        while (angleError > Math.PI) angleError -= 2 * Math.PI;
-        while (angleError < -Math.PI) angleError += 2 * Math.PI;
+    // Detectamos el movimiento real para el contravolante táctico
+    let actualMotionDir = 0;
+    if (vehicleState.speed > 0.2) actualMotionDir = 1;
+    else if (vehicleState.speed < -0.2) actualMotionDir = -1;
 
-        // DEBUG LOG (limitado para no saturar)
-        if (Math.random() < 0.05) {
-            console.log(`AutoCtrl: Heading=${currentHeading.toFixed(2)} TargetAng=${targetAngle.toFixed(2)} Err=${angleError.toFixed(2)}`);
-        }
+    // Si se mueve, manda la inercia; si está quieto, manda la intención (desiredDir)
+    const effectiveDir = actualMotionDir !== 0 ? actualMotionDir : desiredDir;
 
-        // Aplicar ganancia proporcional (P-Controller)
-        const Kp = 8.0; // Ganancia EXTREMA para anular cualquier error
-        const maxSteer = 1.2; // ~70 grados para curvas cerradas
-        let newSteer = angleError * Kp;
+    // --- PURE PURSUIT (Cálculo del ángulo) ---
 
-        // Clamp
-        if (newSteer > maxSteer) newSteer = maxSteer;
-        if (newSteer < -maxSteer) newSteer = -maxSteer;
+    // 1. Ángulo absoluto hacia el objetivo usando arcotangente -> en q angulo esta el objetivo
+    let targetAngle = Math.atan2(dx, dz);
 
-        // Guardar cambios
-        setSteering(newSteer);
+    // 2. Heading actual del vehículo -> hacia donde apunta actualmente el auto
+    let currentHeading = vehicleState.heading;
 
-        // Throttle Proporcional (Anti-Oscilación)
-        // En lugar de cortar a 0, reducimos velocidad suavemente en curvas
-        const maxTurnError = 0.8; // ~45 grados
-        // Factor de reducción: 1.0 (recto) a 0.0 (curva cerrada)
-        let throttleFactor = 1.0 - Math.min(Math.abs(angleError) / maxTurnError, 1.0);
+    // 3. Ajuste de rumbo si vamos en reversa (el "frente" ahora es la parte trasera)
+    let virtualHeading = currentHeading;
+    if (effectiveDir === -1) {
+      virtualHeading += Math.PI;
+    }
 
-        const baseThrottle = 0.4;
-        const minThrottle = 0.2; // Mínimo para vencer fricción
+    // 4. Calcular el error de ángulo (cuánto nos falta girar) y normalizar entre -PI y PI
+    let angleError = targetAngle - virtualHeading;
+    while (angleError > Math.PI) angleError -= 2 * Math.PI;
+    while (angleError < -Math.PI) angleError += 2 * Math.PI;
 
-        let newThrottle = minThrottle + (baseThrottle - minThrottle) * throttleFactor;
+    // Log aleatorio para monitorear sin saturar la consola
+    if (Math.random() < 0.05) {
+      console.log(`AutoCtrl: Idx=${currentIndex.current} Dir=${desiredDir}...`);
+    }
 
-        // Si el error es EXTREMO (> 45 grados), necesitamos pivotar (si es posible) o ir muy lento
-        if (Math.abs(angleError) > maxTurnError) {
-            // Si estamos casi parados, aplicar un poco de fuerza para que las ruedas giren y el auto rote
-            if (Math.abs(vehicleState.speed) < 0.2) {
-                newThrottle = 0.25;
-            } else {
-                newThrottle = 0.1; // Frenar pero no a cero absoluto para mantener inercia de giro
-            }
-        }
+    // --- CONTROL DEL VOLANTE (Steering) ---
+    const Kp = -3.5; // Ganancia proporcional (fuerza de giro)
+    const maxSteer = 0.8; // Límite físico del volante
+    let newSteer = angleError * Kp;
 
-        if (!canAccelerate) {
-            setThrottle(0);
-        } else {
-            setThrottle(newThrottle);
-        }
-    });
+    // Si vamos en reversa, el volante debe girar al revés para corregir el rumbo
+    if (effectiveDir === -1) {
+      newSteer *= -1;
+    }
 
-    return null;
+    // Limitamos el giro del volante al máximo permitido (Clamp)
+    if (newSteer > maxSteer) newSteer = maxSteer;
+    if (newSteer < -maxSteer) newSteer = -maxSteer;
+
+    setSteering(newSteer);
+
+    // --- CONTROL DE ACELERACIÓN (Throttle) ---
+    // Si el ángulo de error es grande (curva cerrada), bajamos la velocidad
+    const maxTurnError = 0.8;
+    let throttleFactor =
+      1.0 - Math.min(Math.abs(angleError) / maxTurnError, 1.0);
+
+    const baseThrottle = 0.4; // Aceleración normal
+    const minThrottle = 0.2; // Aceleración mínima
+
+    // Calculamos un acelerador proporcional
+    let newThrottle =
+      minThrottle + (baseThrottle - minThrottle) * throttleFactor;
+
+    // Si el error es muy grande, entramos en modo "maniobra lenta"
+    //math.abs convierte cualquier numero en positivo ej |-5| = 5
+    if (Math.abs(angleError) > maxTurnError) {
+      if (Math.abs(vehicleState.speed) < 0.2) {
+        newThrottle = 0.25; // Impulso para empezar a mover las ruedas
+      } else {
+        newThrottle = 0.1; // Casi frenado para girar sobre el eje
+      }
+    }
+
+    // Aplicamos el acelerador final
+    if (!canAccelerate) {
+      //recuerdo que canAccelerate es true si no vas en direccion contraria a donde deberias ir. de ser asi el auto se frena, antes de darle la nueva velocidad en la direccion correcta
+      setThrottle(0);
+    } else {
+      setThrottle(newThrottle);
+    }
+  });
+
+  return null; // Este componente no renderiza nada visualmente, es pura lógica
 }

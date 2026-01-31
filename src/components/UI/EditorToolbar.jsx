@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { useStore } from "../../store/useStore";
 import { ScenarioManager } from "./ScenarioManager";
-import { findPath } from "../../utils/pathfinding";
+// Importamos la versión ASYNC del buscador para no congelar la pantalla
+import { findPathAsync } from "../../utils/pathfinding";
 
 export function EditorToolbar() {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
   const [showDestinations, setShowDestinations] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false); // MAURI: Estado para mostrar carga
 
   // Acciones y estado del Store
   const selectedTool = useStore((state) => state.selectedTool);
@@ -26,33 +28,49 @@ export function EditorToolbar() {
   ];
 
   // ... dentro de EditorToolbar ...
-  const handleAutoDrive = (destKey) => {
+  const handleAutoDrive = async (destKey) => {
+    if (isCalculating) return; // Evitar doble click
     const dest = gridData[destKey];
     if (!dest) return;
 
     const [destX, destZ] = destKey.split(",").map(Number);
     const { vehicleState } = useStore.getState();
 
-    const result = findPath(
-      { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
-      { x: destX, z: destZ },
-      gridData,
-      GRID_SIZE,
-    );
+    // Resetear previos
+    setExplored([]);
+    setPath([]);
+    setIsCalculating(true);
 
-    if (result.path) {
-      setPath(result.path);
-      setExplored(result.explored);
-      setTargetDestination(dest);
-      setAutonomous(true);
-      setOpen(false);
-    } else {
-      setExplored(result.explored);
-      console.error("DEBUG INFO: Revisa la nube de puntos rojos en el mapa.");
-      alert(`Fallo en la navegación:
-      - Nodos explorados: ${result.explored.length}
-      - ¿Inicio bloqueado?: Revisa la consola (F12)
-      - Sugerencia: Asegúrate de que el camino sea lo suficientemente ancho para el auto (4.5m x 2m)`);
+    try {
+      // Ejecutamos el algoritmo A* (Hybrid A Star)
+      // Le pasamos una "callback" (función de retorno) que se ejecuta cada 500 iteraciones.
+      // Esto permite ver los puntos rojos apareciendo en tiempo real.
+      const result = await findPathAsync(
+        { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
+        { x: destX, z: destZ },
+        gridData,
+        GRID_SIZE,
+        (exploredNodes) => setExplored(exploredNodes) // Actualización visual progresiva
+      );
+
+      if (result.path) {
+        setPath(result.path);
+        setExplored(result.explored);
+        setTargetDestination(dest);
+        setAutonomous(true);
+        setOpen(false);
+      } else {
+        setExplored(result.explored);
+        console.error("DEBUG INFO: Revisa la nube de puntos rojos en el mapa.");
+        alert(`Fallo en la navegación:
+          - Nodos explorados: ${result.explored.length}
+          - ¿Inicio bloqueado?
+          - Sugerencia: Camino recomendado > 3.5m (Auto 1.5m + Margen)`);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCalculating(false);
     }
   };
 

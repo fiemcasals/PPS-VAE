@@ -65,12 +65,14 @@ export function useVehiclePhysics() {
         // Solo giramos si nos movemos (o muy poco) para realismo
         if (Math.abs(state.speed) > 0.1) {
             const angularVelocity = (state.speed / VEHICLE_CONFIG.WHEELBASE) * Math.tan(state.steeringAngle);
-            state.heading += angularVelocity * delta; // Three.js usa Y+ arriba, rotación antihoraria es positiva usualmente, pero depende del sistema. Ajustar signo si es necesario.
+            state.heading -= angularVelocity * delta; // MAURI: Invertido a -= por reporte de "dirección invertida"
         }
 
+        // Actualizamos posiciones finales
         state.x += state.speed * Math.sin(state.heading) * delta;
         state.z += state.speed * Math.cos(state.heading) * delta;
 
+        // Devolvemos una copia del estado para que React detecte cambios si fuera necesario
         return { ...state };
     };
 
