@@ -19,6 +19,7 @@ export const useStore = create((set) => ({
   // --- SISTEMA DE MAPA Y EDICIÓN ---
   selectedTool: "none",
   gridData: {},
+  buildings: [], // Lista de edificios { id, x, z, width, depth, type }
 
   // --- CONDUCCIÓN AUTÓNOMA ---
   isAutonomous: false,
@@ -45,7 +46,13 @@ export const useStore = create((set) => ({
       }
       return { gridData: newGridData };
     }),
-  clearMap: () => set({ gridData: {}, currentPath: [], exploredNodes: [] }),
+  addBuilding: (building) =>
+    set((state) => ({ buildings: [...state.buildings, building] })),
+
+  removeBuilding: (id) =>
+    set((state) => ({ buildings: state.buildings.filter(b => b.id !== id) })),
+
+  clearMap: () => set({ gridData: {}, buildings: [], currentPath: [], exploredNodes: [] }),
   loadGridData: (data) => set({ gridData: data }),
 
   // --- ACCIONES DE VEHÍCULO ---

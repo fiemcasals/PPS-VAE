@@ -29,11 +29,19 @@ export function EditorToolbar() {
   const loadRecordedPath = useStore((state) => state.loadRecordedPath);
   const deleteRecordedPath = useStore((state) => state.deleteRecordedPath);
 
-  const tools = [
-    { id: "none", label: "✋ Navegar", color: "#666" },
-    { id: "road", label: "🛣️ Camino", color: "#333" },
-    { id: "eraser", label: "🧽 Borrar", color: "#999" },
+  // Submenú de construcciones
+  const [showConstruction, setShowConstruction] = useState(false);
+
+  // Tools definitions
+  const constructionTools = [
+    { id: "road", label: "🛣️ Camino (Arrastrar)", color: "#333" },
     { id: "destination", label: "🚩 Destino", color: "#ffcc00" },
+    { id: "tree", label: "🌲 Árbol", color: "#228b22" },
+    { id: "streetlight", label: "💡 Farola", color: "#f1c40f" },
+    { id: "flag", label: "🇦🇷 Bandera", color: "#74acdf" },
+    { id: "building", label: "🏭 Galpón (Arrastrar)", color: "#8b4513" },
+    { id: "floor", label: "⬜ Baldosas (Arrastrar)", color: "#95a5a6" },
+    { id: "eraser", label: "🧽 Borrar", color: "#999" },
   ];
 
   const handleAutoDrive = async (destKey) => {
@@ -178,21 +186,67 @@ export function EditorToolbar() {
             {isRecording ? "⏹️ DETENER GRABACIÓN" : "⏺️ GRABAR RECORRIDO"}
           </button>
 
-          {!isRecording && tools.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setTool(t.id); setOpen(false); }}
-              style={{
-                padding: "10px 20px",
-                border: "none",
-                cursor: "pointer",
-                background: selectedTool === t.id ? "#e0e0e0" : "white",
-                textAlign: "left",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+          {!isRecording && (
+            <>
+              {/* HERRAMIENTAS BÁSICAS */}
+              <button
+                onClick={() => { setTool("none"); setOpen(false); }}
+                style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: selectedTool === "none" ? "#e0e0e0" : "white", textAlign: "left" }}
+              >
+                ✋ Navegar
+              </button>
+
+              {/* GRUPO CONSTRUCCIONES */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowConstruction(!showConstruction);
+                }}
+                style={{
+                  padding: "10px 20px",
+                  border: "none",
+                  cursor: "pointer",
+                  background: "white",
+                  textAlign: "left",
+                  fontWeight: "bold",
+                  color: "#d35400",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <span>🏗️ Construcciones</span>
+                <span>{showConstruction ? "▼" : "▶"}</span>
+              </button>
+
+              {showConstruction && (
+                <div style={{ paddingLeft: "15px", background: "#fff5e6", borderLeft: "3px solid #d35400" }}>
+                  {constructionTools.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setTool(t.id);
+                        setOpen(false); // Cierra todo el menú al elegir
+                      }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "8px 10px",
+                        border: "none",
+                        cursor: "pointer",
+                        background: selectedTool === t.id ? "#ffecd9" : "transparent",
+                        textAlign: "left",
+                        fontSize: "0.9em",
+                        color: t.color
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
           <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
 

@@ -23,7 +23,7 @@ function Ground() {
   return (
     <mesh ref={ref} receiveShadow>
       <planeGeometry args={[1000, 1000]} />
-      <meshStandardMaterial color="#1a1a1a" />
+      <meshStandardMaterial color="#567d46" roughness={1} /> {/* Verde Césped */}
     </mesh>
   );
 }
