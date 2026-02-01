@@ -5,12 +5,14 @@ import { useScenarios } from "../../hooks/useScenarios";
 export function ScenarioManager({ isOpen, onClose }) {
     const [scenarioName, setScenarioName] = useState("");
     const gridData = useStore((state) => state.gridData);
+    const buildings = useStore((state) => state.buildings);
     const loadGridData = useStore((state) => state.loadGridData);
+    const loadBuildings = useStore((state) => state.loadBuildings);
     const { scenariosList, saveScenario, loadScenario, deleteScenario } =
         useScenarios();
 
     // Función para guardar el escenario actual en la memoria del navegador (LocalStorage)
-    // Esta función es parte del hook useScenarios, pero su lógica interna es la siguiente:
+    // Se guarda tanto la grilla (gridData) como los edificios (buildings).
     // 1. Verifica que el nombre del escenario no esté vacío.
     // 2. Obtiene el estado actual del diseño (gridData) directamente del store de Zustand.
     // 3. Crea un objeto de escenario con un ID único, el nombre, la fecha de última modificación y el gridData.
@@ -92,7 +94,7 @@ export function ScenarioManager({ isOpen, onClose }) {
                 />
                 <button
                     onClick={() => {
-                        saveScenario(scenarioName, gridData);
+                        saveScenario(scenarioName, { gridData, buildings });
                         setScenarioName("");
                     }}
                     disabled={!scenarioName.trim()}
@@ -119,7 +121,16 @@ export function ScenarioManager({ isOpen, onClose }) {
                     <div
                         key={name}
                         onClick={() => {
-                            loadGridData(loadScenario(name));
+                            const data = loadScenario(name);
+                            if (data.gridData) {
+                                // Nuevo formato: Objeto compuesto
+                                loadGridData(data.gridData);
+                                loadBuildings(data.buildings || []);
+                            } else {
+                                // Viejo formato: Solo la grilla
+                                loadGridData(data);
+                                loadBuildings([]); // Limpiar edificios si no hay
+                            }
                             onClose(); // MAURI: Cerrar menú al elegir
                         }}
                         style={{

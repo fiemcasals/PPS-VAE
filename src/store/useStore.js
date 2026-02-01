@@ -54,6 +54,7 @@ export const useStore = create((set) => ({
 
   clearMap: () => set({ gridData: {}, buildings: [], currentPath: [], exploredNodes: [] }),
   loadGridData: (data) => set({ gridData: data }),
+  loadBuildings: (data) => set({ buildings: data }),
 
   // --- ACCIONES DE VEHÍCULO ---
   setSteering: (val) =>

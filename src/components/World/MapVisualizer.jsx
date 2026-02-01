@@ -13,13 +13,19 @@ export function MapVisualizer() {
       {Object.entries(gridData).map(([key, value]) => {
         const [x, z] = key.split(",").map(Number);
 
-        // ROAD & DESTINATION
-        if (value.type === "road" || value.type === "destination") {
+        // ROAD, PARKING & DESTINATION
+        if (value.type === "road" || value.type === "destination" || value.type === "parking") {
           return (
             <mesh key={key} position={[x, 0.05, z]}>
               <boxGeometry args={[GRID_SIZE, 0.1, GRID_SIZE]} />
               <meshStandardMaterial
-                color={value.type === "road" ? "#111111" : "#ffcc00"}
+                color={
+                  value.type === "road"
+                    ? "#111111"
+                    : value.type === "parking"
+                      ? "#8d6e63" // Brown for Parking
+                      : "#ffcc00"
+                }
                 metalness={0.1}
                 roughness={0.8}
               />
@@ -142,6 +148,99 @@ export function MapVisualizer() {
               <boxGeometry args={[b.width, 0.05, b.depth]} />
               <meshStandardMaterial color="#95a5a6" roughness={0.8} /> {/* Gris Baldosa */}
             </mesh>
+          );
+        }
+
+        // --- PILETA (Agua + Trampolín) ---
+        if (b.type === "pool") {
+          return (
+            <group key={b.id} position={[b.x, 0, b.z]}>
+              {/* Agua */}
+              <mesh position={[0, 0.1, 0]}>
+                <boxGeometry args={[b.width, 0.4, b.depth]} />
+                <meshStandardMaterial
+                  color="#3498db"
+                  roughness={0.1}
+                  metalness={0.5}
+                  transparent
+                  opacity={0.8}
+                />
+              </mesh>
+
+              {/* Borde (Opcional, piso alrededor apenas visible) */}
+              <mesh position={[0, 0.15, 0]}>
+                <boxGeometry args={[b.width + 0.4, 0.1, b.depth + 0.4]} />
+                <meshStandardMaterial color="#ecf0f1" />
+              </mesh>
+
+              {/* Volvemos a dibujar el agua un poco mas arriba para tapar el borde por dentro */}
+              <mesh position={[0, 0.2, 0]}>
+                <boxGeometry args={[b.width, 0.25, b.depth]} />
+                <meshStandardMaterial
+                  color="#3498db"
+                  roughness={0.1}
+                  metalness={0.5}
+                />
+              </mesh>
+
+              {/* Trampolín (Solo si hay espacio, en el borde positivo de Z) */}
+              {b.depth > 2 && (
+                <group position={[0, 0.5, b.depth / 2 + 0.2]}>
+                  {/* Base */}
+                  <mesh position={[0, 0, 0]}>
+                    <boxGeometry args={[0.5, 0.5, 0.5]} />
+                    <meshStandardMaterial color="#95a5a6" />
+                  </mesh>
+                  {/* Tabla */}
+                  <mesh position={[0, 0.25, -0.8]}>
+                    <boxGeometry args={[0.5, 0.1, 1.5]} />
+                    <meshStandardMaterial color="#f39c12" />
+                  </mesh>
+                </group>
+              )}
+            </group>
+          );
+        }
+
+        // --- QUINCHO (Circular con techo de paja) ---
+        if (b.type === "quincho") {
+          const radius = Math.min(b.width, b.depth) / 2;
+          const height = 1.5; // Altura de pilares
+          const roofHeight = 1.5; // Altura del cono
+
+          return (
+            <group key={b.id} position={[b.x, 0, b.z]}>
+              {/* Piso Circular */}
+              <mesh position={[0, 0.05, 0]}>
+                <cylinderGeometry args={[radius, radius, 0.1, 32]} />
+                <meshStandardMaterial color="#A1887F" />
+              </mesh>
+
+              {/* Techo (Cono de paja) */}
+              <mesh position={[0, height + roofHeight / 2, 0]}>
+                <coneGeometry args={[radius * 1.2, roofHeight, 32]} /> {/* Un poco más ancho que el piso */}
+                <meshStandardMaterial color="#C0A062" roughness={1} /> {/* Color Paja */}
+              </mesh>
+
+              {/* Pilares (4 alrededor) */}
+              {[0, 1, 2, 3].map((i) => {
+                const angle = (i / 4) * Math.PI * 2;
+                const px = Math.cos(angle) * (radius * 0.8);
+                const pz = Math.sin(angle) * (radius * 0.8);
+                return (
+                  <mesh key={i} position={[px, height / 2, pz]}>
+                    <cylinderGeometry args={[0.08, 0.08, height, 8]} />
+                    <meshStandardMaterial color="#5D4037" /> {/* Madera Oscura */}
+                  </mesh>
+                );
+              })}
+
+              {/* Mesa central (Opcional) */}
+              <mesh position={[0, 0.4, 0]}>
+                <cylinderGeometry args={[radius * 0.3, radius * 0.3, 0.6, 16]} />
+                <meshStandardMaterial color="#5D4037" />
+              </mesh>
+            </group>
           );
         }
 

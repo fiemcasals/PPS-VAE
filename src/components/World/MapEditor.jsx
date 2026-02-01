@@ -5,6 +5,8 @@ export function MapEditor() {
   const selectedTool = useStore((state) => state.selectedTool);
   const setGridObject = useStore((state) => state.setGridObject);
   const addBuilding = useStore((state) => state.addBuilding); // Nuevo action
+  const buildings = useStore((state) => state.buildings);
+  const removeBuilding = useStore((state) => state.removeBuilding);
   const GRID_SIZE = useStore((state) => state.GRID_SIZE);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -21,7 +23,7 @@ export function MapEditor() {
 
   const handlePointerDown = (e) => {
     e.stopPropagation();
-    const dragTools = ["building", "floor", "road"];
+    const dragTools = ["building", "floor", "road", "pool", "quincho", "eraser", "parking"];
 
     if (!dragTools.includes(selectedTool)) {
       // Herramientas de "un clic" (Tree, Eraser, Dest, Streetlight, Flag)
@@ -40,7 +42,7 @@ export function MapEditor() {
     e.stopPropagation();
     if (!isDragging) return;
 
-    const dragTools = ["building", "floor", "road"];
+    const dragTools = ["building", "floor", "road", "pool", "quincho", "eraser", "parking"];
 
     if (!dragTools.includes(selectedTool)) {
       // Pintar continuo
@@ -55,7 +57,7 @@ export function MapEditor() {
     e.stopPropagation();
     setIsDragging(false);
 
-    const dragTools = ["building", "floor", "road"];
+    const dragTools = ["building", "floor", "road", "pool", "quincho", "eraser", "parking"];
 
     if (dragTools.includes(selectedTool) && dragStart && dragEnd) {
       // 1. Calcular límites del rectángulo
@@ -64,22 +66,59 @@ export function MapEditor() {
       const minZ = Math.min(dragStart.z, dragEnd.z);
       const maxZ = Math.max(dragStart.z, dragEnd.z);
 
-      if (selectedTool === "road") {
-        // Lógica especial para CAMINOS (Solo pinta la grilla)
+      if (selectedTool === "road" || selectedTool === "parking") {
+        // Lógica especial para CAMINOS y ESTACIONAMIENTO (Solo pinta la grilla)
+        const type = selectedTool === "parking" ? "parking" : "road";
         for (let i = minX; i <= maxX; i++) {
           for (let j = minZ; j <= maxZ; j++) {
             const wx = (i + 0.5) * GRID_SIZE;
             const wz = (j + 0.5) * GRID_SIZE;
-            setGridObject(wx, wz, "road");
+            setGridObject(wx, wz, type);
           }
         }
+      } else if (selectedTool === "eraser") {
+        // --- BORRAR ÁREA (Grilla + Edificios) ---
+        // 1. Borrar objetos de la grilla
+        for (let i = minX; i <= maxX; i++) {
+          for (let j = minZ; j <= maxZ; j++) {
+            const wx = (i + 0.5) * GRID_SIZE;
+            const wz = (j + 0.5) * GRID_SIZE;
+            setGridObject(wx, wz, "none");
+          }
+        }
+
+        // 2. Borrar edificios que intersectan con el área seleccionada
+        // Convertimos celdas a coordenadas de mundo del área de selección
+        const selMinX = minX * GRID_SIZE;
+        const selMaxX = (maxX + 1) * GRID_SIZE;
+        const selMinZ = minZ * GRID_SIZE;
+        const selMaxZ = (maxZ + 1) * GRID_SIZE;
+
+        buildings.forEach((b) => {
+          // AABB Collision (Axis-Aligned Bounding Box)
+          // Edificio bounds:
+          const bMinX = b.x - b.width / 2;
+          const bMaxX = b.x + b.width / 2;
+          const bMinZ = b.z - b.depth / 2;
+          const bMaxZ = b.z + b.depth / 2;
+
+          if (
+            bMinX < selMaxX &&
+            bMaxX > selMinX &&
+            bMinZ < selMaxZ &&
+            bMaxZ > selMinZ
+          ) {
+            removeBuilding(b.id);
+          }
+        });
+
       } else {
         // Lógica para EDIFICIOS y BALDOSAS (Crea objeto 3D + marca grilla)
         const width = (maxX - minX + 1) * GRID_SIZE;
         const depth = (maxZ - minZ + 1) * GRID_SIZE;
         const centerX = (minX + (maxX - minX + 1) / 2) * GRID_SIZE;
         const centerZ = (minZ + (maxZ - minZ + 1) / 2) * GRID_SIZE;
-        const type = selectedTool === "floor" ? "floor" : "building";
+        const type = selectedTool === "floor" ? "floor" : (selectedTool === "pool" ? "pool" : (selectedTool === "quincho" ? "quincho" : "building"));
 
         addBuilding({
           id: Date.now(),
@@ -98,6 +137,10 @@ export function MapEditor() {
 
             if (type === "building") {
               setGridObject(wx, wz, "obstacle", { subtype: "building_base" });
+            } else if (type === "pool") {
+              setGridObject(wx, wz, "obstacle", { subtype: "water" });
+            } else if (type === "quincho") {
+              setGridObject(wx, wz, "obstacle", { subtype: "structure" });
             } else {
               setGridObject(wx, wz, "floor", { subtype: "paved" });
             }
@@ -119,8 +162,7 @@ export function MapEditor() {
     let toolToApply = selectedTool;
     let metadata = {};
 
-    if (selectedTool === "eraser") toolToApply = "none";
-    else if (["tree", "streetlight", "flag"].includes(selectedTool)) toolToApply = selectedTool;
+    if (["tree", "streetlight", "flag"].includes(selectedTool)) toolToApply = selectedTool;
     else if (selectedTool === "destination") {
       if (!isClick) return; // Solo clic simple
       const name = window.prompt("Nombre del destino:", `Destino ${Math.round(x)},${Math.round(z)}`);
@@ -133,7 +175,7 @@ export function MapEditor() {
 
   // Render del Preview (Fantasma de Construcción)
   const renderPreview = () => {
-    const dragTools = ["building", "floor", "road"];
+    const dragTools = ["building", "floor", "road", "pool", "quincho", "eraser", "parking"];
     if (!isDragging || !dragTools.includes(selectedTool) || !dragStart || !dragEnd) return null;
 
     const minX = Math.min(dragStart.x, dragEnd.x);
@@ -149,6 +191,7 @@ export function MapEditor() {
     let height = 3;
     let color = "#8b4513";
     let yPos = 1.5;
+    let shape = "box"; // default
 
     if (selectedTool === "floor") {
       height = 0.1;
@@ -158,6 +201,33 @@ export function MapEditor() {
       height = 0.05;
       color = "#111111"; // Negro para Caminos
       yPos = 0.05;
+    } else if (selectedTool === "parking") {
+      height = 0.05;
+      color = "#8d6e63"; // Marrón para Estacionamiento
+      yPos = 0.05;
+    } else if (selectedTool === "pool") {
+      height = 0.1;
+      color = "#3498db"; // Azul para Piletas
+      yPos = 0.1;
+    } else if (selectedTool === "quincho") {
+      height = 2.0;
+      color = "#d35400"; // Naranja techo
+      yPos = 1.0;
+      shape = "cylinder"; // preview shape
+    } else if (selectedTool === "eraser") {
+      height = 1.0;
+      color = "#e74c3c"; // Rojo borrar
+      yPos = 0.5;
+    }
+
+    if (shape === "cylinder") {
+      const radius = Math.min(width, depth) / 2;
+      return (
+        <mesh position={[cx, yPos, cz]}>
+          <cylinderGeometry args={[radius, radius, height, 32]} />
+          <meshStandardMaterial color={color} transparent opacity={0.5} />
+        </mesh>
+      );
     }
 
     return (

@@ -35,12 +35,15 @@ export function EditorToolbar() {
   // Tools definitions
   const constructionTools = [
     { id: "road", label: "🛣️ Camino (Arrastrar)", color: "#333" },
+    { id: "parking", label: "🅿️ Estacionamiento (Arrastrar)", color: "#8d6e63" },
     { id: "destination", label: "🚩 Destino", color: "#ffcc00" },
     { id: "tree", label: "🌲 Árbol", color: "#228b22" },
     { id: "streetlight", label: "💡 Farola", color: "#f1c40f" },
     { id: "flag", label: "🇦🇷 Bandera", color: "#74acdf" },
     { id: "building", label: "🏭 Galpón (Arrastrar)", color: "#8b4513" },
     { id: "floor", label: "⬜ Baldosas (Arrastrar)", color: "#95a5a6" },
+    { id: "pool", label: "🏊 Pileta (Arrastrar)", color: "#3498db" },
+    { id: "quincho", label: "⛺ Quincho (Arrastrar)", color: "#d35400" },
     { id: "eraser", label: "🧽 Borrar", color: "#999" },
   ];
 
@@ -142,161 +145,187 @@ export function EditorToolbar() {
         {isRecording ? "🔴" : "✏️"}
       </button>
 
-      {/* MENÚ DESPLEGABLE */}
+      {/* CONTENEDOR DE MENÚS (Flex para ponerlos lado a lado) */}
       {open && (
-        <div
-          style={{
-            background: "white",
-            marginTop: "10px",
-            borderRadius: "8px",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            minWidth: "180px",
-          }}
-        >
-          {/* SECCIÓN GRABACIÓN */}
-          <button
-            onClick={() => {
-              if (isRecording) {
-                // DETENER (Guardar)
-                const name = prompt("Nombre de la ruta:", "Ruta 1");
-                if (name) saveRecordedPath(name);
-                else setRecording(false);
-              } else {
-                // INICIAR
-                if (confirm("¿Iniciar grabación de ruta? Conduce manualmente.")) {
-                  setRecording(true);
-                }
-              }
-              setOpen(false);
-            }}
+        <div style={{ display: "flex", alignItems: "flex-start", marginTop: "10px", gap: "10px" }}>
+
+          {/* MENÚ PRINCIPAL */}
+          <div
             style={{
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              background: isRecording ? "#ffeebb" : "white",
-              color: isRecording ? "red" : "black",
-              fontWeight: "bold",
-              textAlign: "left",
-              borderBottom: "1px solid #eee"
+              background: "white",
+              borderRadius: "8px",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+              minWidth: "180px",
             }}
           >
-            {isRecording ? "⏹️ DETENER GRABACIÓN" : "⏺️ GRABAR RECORRIDO"}
-          </button>
+            {/* SECCIÓN GRABACIÓN */}
+            <button
+              onClick={() => {
+                if (isRecording) {
+                  // DETENER (Guardar)
+                  const name = prompt("Nombre de la ruta:", "Ruta 1");
+                  if (name) saveRecordedPath(name);
+                  else setRecording(false);
+                } else {
+                  // INICIAR
+                  if (confirm("¿Iniciar grabación de ruta? Conduce manualmente.")) {
+                    setRecording(true);
+                  }
+                }
+                setOpen(false);
+              }}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                cursor: "pointer",
+                background: isRecording ? "#ffeebb" : "white",
+                color: isRecording ? "red" : "black",
+                fontWeight: "bold",
+                textAlign: "left",
+                borderBottom: "1px solid #eee"
+              }}
+            >
+              {isRecording ? "⏹️ DETENER GRABACIÓN" : "⏺️ GRABAR RECORRIDO"}
+            </button>
 
-          {!isRecording && (
-            <>
-              {/* HERRAMIENTAS BÁSICAS */}
-              <button
-                onClick={() => { setTool("none"); setOpen(false); }}
-                style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: selectedTool === "none" ? "#e0e0e0" : "white", textAlign: "left" }}
-              >
-                ✋ Navegar
-              </button>
-
-              {/* GRUPO CONSTRUCCIONES */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowConstruction(!showConstruction);
-                }}
-                style={{
-                  padding: "10px 20px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: "white",
-                  textAlign: "left",
-                  fontWeight: "bold",
-                  color: "#d35400",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center"
-                }}
-              >
-                <span>🏗️ Construcciones</span>
-                <span>{showConstruction ? "▼" : "▶"}</span>
-              </button>
-
-              {showConstruction && (
-                <div style={{ paddingLeft: "15px", background: "#fff5e6", borderLeft: "3px solid #d35400" }}>
-                  {constructionTools.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        setTool(t.id);
-                        setOpen(false); // Cierra todo el menú al elegir
-                      }}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        padding: "8px 10px",
-                        border: "none",
-                        cursor: "pointer",
-                        background: selectedTool === t.id ? "#ffecd9" : "transparent",
-                        textAlign: "left",
-                        fontSize: "0.9em",
-                        color: t.color
-                      }}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
-
-          <button onClick={handleStartTest} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#dc3545" }}>
-            🧪 Test Random
-          </button>
-
-          <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#007bff" }}>
-            🤖 Auto / Playback
-          </button>
-
-          {showDestinations && (
-            <div style={{ background: "#f8f9fa", padding: "5px", maxHeight: "200px", overflowY: "auto" }}>
-              {/* LISTA DE RUTAS GRABADAS */}
-              {Object.keys(savedPaths).length > 0 && (
-                <>
-                  <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>📼 GRABACIONES</div>
-                  {Object.keys(savedPaths).map((name) => (
-                    <div key={name} style={{ display: "flex", alignItems: "center" }}>
-                      <button
-                        onClick={() => { loadRecordedPath(name); setAutonomous(true); }}
-                        style={{ flex: 1, padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer", color: "#28a745" }}
-                      >
-                        ▶ {name}
-                      </button>
-                      <button onClick={() => deleteRecordedPath(name)} style={{ border: "none", background: "transparent", cursor: "pointer" }}>❌</button>
-                    </div>
-                  ))}
-                  <div style={{ borderBottom: "1px solid #ddd", margin: "5px 0" }}></div>
-                </>
-              )}
-
-              {/* LISTA DE DESTINOS NORMALES */}
-              <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>🚩 DESTINOS</div>
-              {destinations.map(([key, val]) => (
+            {!isRecording && (
+              <>
+                {/* HERRAMIENTAS BÁSICAS */}
                 <button
-                  key={key}
-                  onClick={() => handleAutoDrive(key)}
-                  style={{ display: "block", width: "100%", padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer" }}
+                  onClick={() => { setTool("none"); setOpen(false); }}
+                  style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: selectedTool === "none" ? "#e0e0e0" : "white", textAlign: "left" }}
                 >
-                  📍 {val.name || "Destino"}
+                  ✋ Navegar
+                </button>
+
+                {/* GRUPO CONSTRUCCIONES (ACTIVADOR DEL SUBMENÚ) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowConstruction(!showConstruction);
+                  }}
+                  style={{
+                    padding: "10px 20px",
+                    border: "none",
+                    cursor: "pointer",
+                    background: showConstruction ? "#fff5e6" : "white",
+                    textAlign: "left",
+                    fontWeight: "bold",
+                    color: "#d35400",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderLeft: showConstruction ? "4px solid #d35400" : "none"
+                  }}
+                >
+                  <span>🏗️ Construcciones</span>
+                  <span>{showConstruction ? "▶" : "▶"}</span>
+                </button>
+              </>
+            )}
+
+            <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+
+            <button onClick={handleStartTest} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#dc3545" }}>
+              🧪 Test Random
+            </button>
+
+            <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#007bff" }}>
+              🤖 Auto / Playback
+            </button>
+
+            {showDestinations && (
+              <div style={{ background: "#f8f9fa", padding: "5px", maxHeight: "200px", overflowY: "auto" }}>
+                {/* LISTA DE RUTAS GRABADAS */}
+                {Object.keys(savedPaths).length > 0 && (
+                  <>
+                    <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>📼 GRABACIONES</div>
+                    {Object.keys(savedPaths).map((name) => (
+                      <div key={name} style={{ display: "flex", alignItems: "center" }}>
+                        <button
+                          onClick={() => { loadRecordedPath(name); setAutonomous(true); }}
+                          style={{ flex: 1, padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer", color: "#28a745" }}
+                        >
+                          ▶ {name}
+                        </button>
+                        <button onClick={() => deleteRecordedPath(name)} style={{ border: "none", background: "transparent", cursor: "pointer" }}>❌</button>
+                      </div>
+                    ))}
+                    <div style={{ borderBottom: "1px solid #ddd", margin: "5px 0" }}></div>
+                  </>
+                )}
+
+                {/* LISTA DE DESTINOS NORMALES */}
+                <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>🚩 DESTINOS</div>
+                {destinations.map(([key, val]) => (
+                  <button
+                    key={key}
+                    onClick={() => handleAutoDrive(key)}
+                    style={{ display: "block", width: "100%", padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer" }}
+                  >
+                    📍 {val.name || "Destino"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+            <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
+              💾 Escenarios
+            </button>
+          </div>
+
+          {/* SUBMENÚ LATERAL DE CONSTRUCCIONES */}
+          {showConstruction && !isRecording && (
+            <div
+              style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "8px",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "8px",
+                minWidth: "220px",
+                border: "1px solid #ddd"
+              }}
+            >
+              {constructionTools.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setTool(t.id);
+                    setOpen(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "10px",
+                    border: selectedTool === t.id ? "2px solid #d35400" : "1px solid #eee",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    background: selectedTool === t.id ? "#ffecd9" : "white",
+                    fontSize: "0.85em",
+                    color: "#333",
+                    height: "80px",
+                    textAlign: "center"
+                  }}
+                >
+                  <span style={{ fontSize: "1.5em", marginBottom: "5px" }}>
+                    {t.label.split(" ")[0]}
+                  </span>
+                  <span>
+                    {t.label.replace(/^[^\s]+\s/, "")}
+                  </span>
                 </button>
               ))}
             </div>
           )}
-
-          <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
-          <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
-            💾 Escenarios
-          </button>
         </div>
       )}
 

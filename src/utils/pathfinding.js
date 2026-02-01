@@ -51,8 +51,8 @@ const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99) => {
     const cz = Math.floor(p.z / cellSize) * cellSize + cellSize / 2;
     const cell = gridData[`${cx},${cz}`];
 
-    // Si no existe celda o no es camino/destino, hay colisión
-    if (!cell || (cell.type !== "road" && cell.type !== "destination"))
+    // Si no existe celda o no es camino/destino/estacionamiento, hay colisión
+    if (!cell || (cell.type !== "road" && cell.type !== "destination" && cell.type !== "parking"))
       return true;
   }
   return false;

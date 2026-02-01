@@ -24,6 +24,10 @@ export function CameraController() {
     backward: false,
     left: false,
     right: false,
+    rotateLeft: false,
+    rotateRight: false,
+    rotateUp: false,
+    rotateDown: false,
   });
 
   // Manejador de eventos de teclado
@@ -34,6 +38,10 @@ export function CameraController() {
         case "KeyS": movement.current.backward = true; break;
         case "KeyA": movement.current.left = true; break;
         case "KeyD": movement.current.right = true; break;
+        case "ArrowLeft": movement.current.rotateLeft = true; break;
+        case "ArrowRight": movement.current.rotateRight = true; break;
+        case "ArrowUp": movement.current.rotateUp = true; break;
+        case "ArrowDown": movement.current.rotateDown = true; break;
       }
     };
 
@@ -43,6 +51,10 @@ export function CameraController() {
         case "KeyS": movement.current.backward = false; break;
         case "KeyA": movement.current.left = false; break;
         case "KeyD": movement.current.right = false; break;
+        case "ArrowLeft": movement.current.rotateLeft = false; break;
+        case "ArrowRight": movement.current.rotateRight = false; break;
+        case "ArrowUp": movement.current.rotateUp = false; break;
+        case "ArrowDown": movement.current.rotateDown = false; break;
       }
     };
 
@@ -99,9 +111,12 @@ export function CameraController() {
       camera.lookAt(currentLookAt.current);
     }
 
-    // Lógica de movimiento manual (WASD) para FREE/EDIT mode
+    // Lógica de movimiento manual (WASD) y rotación (Flechas) para FREE/EDIT mode
     if ((cameraMode === "FREE" || isEditing) && controlsRef.current) {
       const speed = 40 * delta; // Velocidad de movimiento
+      const rotateSpeed = 2.0 * delta; // Velocidad de rotación
+
+      // --- MOVIMIENTO (WASD) ---
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
       forward.y = 0; // Mantener movimiento en plano XZ
       forward.normalize();
@@ -119,10 +134,41 @@ export function CameraController() {
 
       if (moveDir.lengthSq() > 0) {
         moveDir.normalize().multiplyScalar(speed);
-
-        // Movemos tanto la cámara como el target del OrbitControls
         camera.position.add(moveDir);
         controlsRef.current.target.add(moveDir);
+      }
+
+      // --- ROTACIÓN (FLECHAS) ---
+      if (
+        movement.current.rotateLeft ||
+        movement.current.rotateRight ||
+        movement.current.rotateUp ||
+        movement.current.rotateDown
+      ) {
+        const offset = new THREE.Vector3().copy(camera.position).sub(controlsRef.current.target);
+
+        // Usamos esféricas para rotar alrededor del target
+        const spherical = new THREE.Spherical().setFromVector3(offset);
+
+        if (movement.current.rotateLeft) spherical.theta += rotateSpeed;
+        if (movement.current.rotateRight) spherical.theta -= rotateSpeed;
+        if (movement.current.rotateUp) spherical.phi -= rotateSpeed;
+        if (movement.current.rotateDown) spherical.phi += rotateSpeed;
+
+        // Limitar ángulo vertical (Polar) para no dar la vuelta completa
+        spherical.phi = Math.max(0.01, Math.min(Math.PI / 2.1, spherical.phi));
+
+        spherical.makeSafe();
+
+        // Convertir de nuevo a cartesianas y aplicar
+        offset.setFromSpherical(spherical);
+
+        camera.position.copy(controlsRef.current.target).add(offset);
+        camera.lookAt(controlsRef.current.target);
+      }
+
+      // Siempre actualizamos controles para mantener sincronía si hubo cambios
+      if (moveDir.lengthSq() > 0 || movement.current.rotateLeft || movement.current.rotateRight || movement.current.rotateUp || movement.current.rotateDown) {
         controlsRef.current.update();
       }
     }
