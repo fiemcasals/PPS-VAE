@@ -204,6 +204,31 @@ export function AutonomousController() {
       }
     }
 
+    // --- MAURI: PREDICTIVE BRAKING (Detección de Curvas Futuras) ---
+    // Miramos "n" nodos hacia adelante para ver si viene una curva fuerte.
+    // Si detectamos cambio de dirección o giro, desaceleramos ANTES de llegar.
+    let curveAhead = false;
+    const lookAheadCount = 5; // Mirar ~5-10 metros adelante
+
+    for (let i = currentIndex.current; i < Math.min(currentIndex.current + lookAheadCount, currentPath.length); i++) {
+      const p = currentPath[i];
+      // Si hay un nodo con steering distinto de 0 (curva) o cambio de marcha
+      if (Math.abs(p.steer) > 0.1 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
+        curveAhead = true;
+        break;
+      }
+    }
+
+    if (curveAhead) {
+      // Limitamos la velocidad si viene una curva
+      // Si ya vamos rápido, forzamos throttle bajo para usar el freno motor/freno
+      if (vehicleState.speed > 3.0) {
+        newThrottle = 0; // Soltar acelerador para frenar
+      } else {
+        newThrottle = Math.min(newThrottle, 0.3); // Mantener velocidad baja
+      }
+    }
+
     // Aplicamos el acelerador final
     if (!canAccelerate) {
       //recuerdo que canAccelerate es true si no vas en direccion contraria a donde deberias ir. de ser asi el auto se frena, antes de darle la nueva velocidad en la direccion correcta
