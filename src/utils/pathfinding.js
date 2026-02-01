@@ -4,24 +4,22 @@ const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno s
 const STEER_STEPS = [-0.6, 0, 0.6]; //los angulos que va a tomar para calcular el siguiente nodo, desde donde esta parado
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
-// MAURI: Factor de peso para la Heurística (h).
-// Un valor de 1.0 es A* estándar (equilibrado).
-// Un valor > 1.0 (ej. 3.0) hace que el algoritmo sea "Codicioso" (Greedy Best-First Search).
-// Efecto visual: "Visión de Túnel" o "Rayo Rojo". El auto corre hacia el objetivo ignorando caminos laterales.
-const HEURISTIC_WEIGHT = 2.0;
+// MAURI: Factor de peso BASE para la Heurística (h).
+// Aumentaremos este valor dinámicamente si la búsqueda tarda mucho.
+const BASE_HEURISTIC_WEIGHT = 2.0;
 
 class Node {
-  constructor(x, z, theta, g, h, parent = null, steer = 0, dir = 1) {
+  constructor(x, z, theta, g, h, parent = null, steer = 0, dir = 1, weight = BASE_HEURISTIC_WEIGHT) {
     this.x = x; // Posición X en el mundo
     this.z = z; // Posición Z en el mundo
     this.theta = theta; // Orientación del vehículo (radianes)
-    this.g = g; // Costo Real: Cuánto "dolor" costó llegar hasta aquí (distancia + penalizaciones)
-    this.h = h; // Heurística: Distancia estimada "a ojo" hasta la meta
-    // F = G + H: El puntaje total. Menor es mejor.
-    this.f = g + h * HEURISTIC_WEIGHT;
-    this.parent = parent; // Nodo anterior (para reconstruir el camino al final)
-    this.steer = steer; // Qué ángulo de volante nos trajo aquí
-    this.direction = dir; // Dirección de marcha (1: Adelante, -1: Reversa)
+    this.g = g; // Costo Real
+    this.h = h; // Heurística
+    // F = G + H * Weight (Dinámico)
+    this.f = g + h * weight;
+    this.parent = parent;
+    this.steer = steer;
+    this.direction = dir;
   }
 }
 
@@ -205,6 +203,15 @@ export async function findPathAsync(
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
       const dirChangeCost = curr.direction !== d ? 50.0 : 0;
 
+      // MAURI: PESO DINÁMICO PROGRESIVO
+      // Cuantos más nodos exploramos, más "desesperado" (Greedy) se vuelve el algoritmo.
+      // iter > 1000: Empieza a subir.
+      // slope: (iter - 1000) / 5000: Cada 5000 iters extra, suma 1.0 al peso.
+      let dynamicWeight = BASE_HEURISTIC_WEIGHT;
+      if (iter > 1000) {
+        dynamicWeight += (iter - 1000) / 2000;
+      }
+
       openSet.push(
         new Node(
           nextX,
@@ -215,6 +222,7 @@ export async function findPathAsync(
           curr,
           s,
           d,
+          dynamicWeight // <--- Pasamos el peso dinámico
         ),
       );
     }
