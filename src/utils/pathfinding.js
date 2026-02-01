@@ -1,7 +1,10 @@
 import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno solo -> de  10grados a 20 grados lo toma como lo mismo.
-const STEER_STEPS = [-0.5, -0.25, 0, 0.25, 0.5]; // MAURI: Limitamos al 50% de giro para obligar a curvas abiertas
+// MAURI: "Conservative Planning": Limitamos el "cerebro" al 40% del volante (0.32 rad).
+// El auto FÍSICAMENTE puede girar 0.8, pero el PLAN nunca pedirá más de 0.32.
+// Esto fuerza curvas mucho más amplias (radios grandes) que el límite físico.
+const STEER_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
 // MAURI: Factor de peso BASE para la Heurística (h).
@@ -196,13 +199,15 @@ export async function findPathAsync(
         continue;
 
       // MAURI: "Tunnel Vision Config"
-      //steering penalty reduced from 10 to 2 to allow smoother curves
+      // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
+      // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
       const moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 2;
+        (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 20;
       const nextG = curr.g + moveCost;
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
-      const dirChangeCost = curr.direction !== d ? 50.0 : 0;
+      // Subimos a 150 para que le duela un poco más hacer cambios innecesarios.
+      const dirChangeCost = curr.direction !== d ? 150.0 : 0;
 
       // MAURI: PESO DINÁMICO PROGRESIVO
       // Cuantos más nodos exploramos, más "desesperado" (Greedy) se vuelve el algoritmo.
@@ -240,7 +245,7 @@ function smoothPath(path, gridData, cellSize) {
 
   // Hacemos una copia para no mutar mientras leemos
   let smoothed = [...path];
-  const iterations = 10; // MAURI: 10 pasadas es suficiente con los nuevos pasos de giro
+  const iterations = 30; // MAURI: Aumentamos agresivamente el suavizado (30) para eliminar picos "V"
   const weightCurrent = 0.4;
   const weightNeighbors = 0.3; // Pesos más agresivos para los vecinos
 

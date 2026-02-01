@@ -147,7 +147,7 @@ export function AutonomousController() {
     // Buscamos un punto un poco más adelante para que el giro sea suave
     // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
     const isManuever = nextNode && nextNode.direction !== node.direction;
-    let LOOKAHEAD_DIST = isManuever ? 0.2 : 2.0;
+    let LOOKAHEAD_DIST = isManuever ? 0.2 : 1.8; // MAURI: Bajamos a 1.8 para "ceñir" más el auto a la línea
 
     // Si estamos empezando, miramos más cerca para no saltarnos curvas cerradas iniciales
     if (currentIndex.current < 5) {
@@ -253,7 +253,9 @@ export function AutonomousController() {
     }
 
     // --- CONTROL DEL VOLANTE (Steering) ---
-    const Kp = -3.5; // Ganancia proporcional (fuerza de giro)
+    // MAURI: En reversa (effectiveDir === -1) aumentamos la ganancia para corregir agresivamente (-6.0)
+    // En avance también subimos a (-5.0) para evitar que vaya "flotando" paralelo a la línea.
+    const Kp = effectiveDir === -1 ? -6.0 : -5.0;
     const maxSteer = 0.8; // Límite físico del volante
     let newSteer = angleError * Kp;
 
@@ -295,7 +297,7 @@ export function AutonomousController() {
     // Miramos "n" nodos hacia adelante para ver si viene una curva fuerte.
     // Si detectamos cambio de dirección o giro, desaceleramos ANTES de llegar.
     let curveAhead = false;
-    const lookAheadCount = 5; // Mirar ~5-10 metros adelante
+    const lookAheadCount = 10; // MAURI: Miramos más lejos (aprox 20m) para anticipar antes
 
     for (let i = currentIndex.current; i < Math.min(currentIndex.current + lookAheadCount, currentPath.length); i++) {
       const p = currentPath[i];
@@ -308,11 +310,11 @@ export function AutonomousController() {
 
     if (curveAhead) {
       // Limitamos la velocidad si viene una curva
-      // Si ya vamos rápido, forzamos throttle bajo para usar el freno motor/freno
-      if (vehicleState.speed > 3.0) {
+      // MAURI: Frenado agresivo. Si vamos a más de 1.5 (muy despacio), soltamos acelerador.
+      if (vehicleState.speed > 1.5) {
         newThrottle = 0; // Soltar acelerador para frenar
       } else {
-        newThrottle = Math.min(newThrottle, 0.3); // Mantener velocidad baja
+        newThrottle = Math.min(newThrottle, 0.15); // Mantener velocidad "paso de hombre" en curvas
       }
     }
 
