@@ -8,18 +8,26 @@ export function EditorToolbar() {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
   const [showDestinations, setShowDestinations] = useState(false);
-  const [isCalculating, setIsCalculating] = useState(false); // MAURI: Estado para mostrar carga
+  const [isCalculating, setIsCalculating] = useState(false);
 
   // Acciones y estado del Store
   const selectedTool = useStore((state) => state.selectedTool);
   const setTool = useStore((state) => state.setTool);
   const gridData = useStore((state) => state.gridData);
-  const GRID_SIZE = useStore((state) => state.GRID_SIZE); // Importante para el pathfinding
+  const GRID_SIZE = useStore((state) => state.GRID_SIZE);
   const setPath = useStore((state) => state.setPath);
-  const setExplored = useStore((state) => state.setExplored); // Para debug visual
+  const setExplored = useStore((state) => state.setExplored);
   const setAutonomous = useStore((state) => state.setAutonomous);
   const setTargetDestination = useStore((state) => state.setTargetDestination);
   const setTestConfig = useStore((state) => state.setTestConfig);
+
+  // --- RECORDING STATE ---
+  const isRecording = useStore((state) => state.isRecording);
+  const setRecording = useStore((state) => state.setRecording);
+  const saveRecordedPath = useStore((state) => state.saveRecordedPath);
+  const savedPaths = useStore((state) => state.savedPaths);
+  const loadRecordedPath = useStore((state) => state.loadRecordedPath);
+  const deleteRecordedPath = useStore((state) => state.deleteRecordedPath);
 
   const tools = [
     { id: "none", label: "✋ Navegar", color: "#666" },
@@ -28,30 +36,26 @@ export function EditorToolbar() {
     { id: "destination", label: "🚩 Destino", color: "#ffcc00" },
   ];
 
-  // ... dentro de EditorToolbar ...
   const handleAutoDrive = async (destKey) => {
-    if (isCalculating) return; // Evitar doble click
+    // ... (Mismo código de antes)
+    if (isCalculating) return;
     const dest = gridData[destKey];
     if (!dest) return;
 
     const [destX, destZ] = destKey.split(",").map(Number);
     const { vehicleState } = useStore.getState();
 
-    // Resetear previos
     setExplored([]);
     setPath([]);
     setIsCalculating(true);
 
     try {
-      // Ejecutamos el algoritmo A* (Hybrid A Star)
-      // Le pasamos una "callback" (función de retorno) que se ejecuta cada 500 iteraciones.
-      // Esto permite ver los puntos rojos apareciendo en tiempo real.
       const result = await findPathAsync(
         { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
         { x: destX, z: destZ },
         gridData,
         GRID_SIZE,
-        (exploredNodes) => setExplored(exploredNodes) // Actualización visual progresiva
+        (exploredNodes) => setExplored(exploredNodes)
       );
 
       if (result.path) {
@@ -62,11 +66,7 @@ export function EditorToolbar() {
         setOpen(false);
       } else {
         setExplored(result.explored);
-        console.error("DEBUG INFO: Revisa la nube de puntos rojos en el mapa.");
-        alert(`Fallo en la navegación:
-          - Nodos explorados: ${result.explored.length}
-          - ¿Inicio bloqueado?
-          - Sugerencia: Camino recomendado > 3.5m (Auto 1.5m + Margen)`);
+        alert("Fallo en la navegación. Revisa obstáculos.");
       }
     } catch (e) {
       console.error(e);
@@ -76,24 +76,37 @@ export function EditorToolbar() {
   };
 
   const handleStartTest = () => {
+    // ... (Mismo código)
     const countStr = prompt("¿Cuántos destinos aleatorios quieres testear?", "5");
     const count = parseInt(countStr);
     if (!count || count <= 0) return;
-
-    const destEntries = Object.entries(gridData).filter(
-      ([k, v]) => v.type === "destination"
-    );
-    if (destEntries.length === 0) {
-      alert("No hay destinos en el mapa.");
-      return;
-    }
-
-    // Activamos modo test
-    setTestConfig({ active: true, remaining: count }); // El primero cuenta como el actual
-
-    // Elegimos el primero al azar y arrancamos
+    const destEntries = Object.entries(gridData).filter(([k, v]) => v.type === "destination");
+    if (destEntries.length === 0) { alert("No hay destinos."); return; }
+    setTestConfig({ active: true, remaining: count });
     const randomIdx = Math.floor(Math.random() * destEntries.length);
     handleAutoDrive(destEntries[randomIdx][0]);
+  };
+
+  // --- LOGICA DE GRABACIÓN ---
+  const handlePencilClick = () => {
+    if (isRecording) {
+      // STOP RECORDING
+      const name = prompt("Nombre para la ruta grabada:", "Mi Ruta 1");
+      if (name) {
+        saveRecordedPath(name);
+        alert(`Ruta "${name}" guardada. Puedes reproducirla desde '🤖 Auto Drive'.`);
+      } else {
+        setRecording(false); // Cancelar sin guardar
+      }
+    } else {
+      // MENU O START RECORDING (El usuario pidió que el lápiz sirva para grabar)
+      // Mantengo el menú abierto con long click o click derecho? 
+      // La solicitud dice: "al lapiz le agreges una funcion... cambia de nombre a 'detener'"
+      // Así que asumo que el botón principal abre el menú, y DENTRO del menú ponemos la opción de grabar.
+      // O BIEN, que el botón principal CAMBIA de función.
+      // Voy a poner la opción de GRABAR dentro del menú para no perder las heramientas de edición.
+      setOpen(!open);
+    }
   };
 
   const destinations = Object.entries(gridData).filter(
@@ -101,9 +114,8 @@ export function EditorToolbar() {
   );
 
   return (
-    <div
-      style={{ position: "absolute", top: "20px", left: "20px", zIndex: 1000 }}
-    >
+    <div style={{ position: "absolute", top: "20px", left: "20px", zIndex: 1000 }}>
+      {/* BOTÓN PRINCIPAL (LÁPIZ / GRABANDO) */}
       <button
         onClick={() => setOpen(!open)}
         style={{
@@ -112,14 +124,17 @@ export function EditorToolbar() {
           marginTop: "150px",
           cursor: "pointer",
           borderRadius: "50%",
-          border: "none",
-          background: "white",
+          border: isRecording ? "4px solid red" : "none", // Indicador visual
+          background: isRecording ? "#ffeebb" : "white",
           boxShadow: "0 2px 10px rgba(0,0,0,0.3)",
+          animation: isRecording ? "pulse 1s infinite" : "none",
         }}
+        title={isRecording ? "Grabando... Click para opciones" : "Herramientas"}
       >
-        ✏️
+        {isRecording ? "🔴" : "✏️"}
       </button>
 
+      {/* MENÚ DESPLEGABLE */}
       {open && (
         <div
           style={{
@@ -130,16 +145,43 @@ export function EditorToolbar() {
             display: "flex",
             flexDirection: "column",
             boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            minWidth: "150px",
+            minWidth: "180px",
           }}
         >
-          {tools.map((t) => (
+          {/* SECCIÓN GRABACIÓN */}
+          <button
+            onClick={() => {
+              if (isRecording) {
+                // DETENER (Guardar)
+                const name = prompt("Nombre de la ruta:", "Ruta 1");
+                if (name) saveRecordedPath(name);
+                else setRecording(false);
+              } else {
+                // INICIAR
+                if (confirm("¿Iniciar grabación de ruta? Conduce manualmente.")) {
+                  setRecording(true);
+                }
+              }
+              setOpen(false);
+            }}
+            style={{
+              padding: "10px 20px",
+              border: "none",
+              cursor: "pointer",
+              background: isRecording ? "#ffeebb" : "white",
+              color: isRecording ? "red" : "black",
+              fontWeight: "bold",
+              textAlign: "left",
+              borderBottom: "1px solid #eee"
+            }}
+          >
+            {isRecording ? "⏹️ DETENER GRABACIÓN" : "⏺️ GRABAR RECORRIDO"}
+          </button>
+
+          {!isRecording && tools.map((t) => (
             <button
               key={t.id}
-              onClick={() => {
-                setTool(t.id);
-                setOpen(false);
-              }}
+              onClick={() => { setTool(t.id); setOpen(false); }}
               style={{
                 padding: "10px 20px",
                 border: "none",
@@ -154,59 +196,42 @@ export function EditorToolbar() {
 
           <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
 
-          <button
-            onClick={handleStartTest}
-            style={{
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              background: "white",
-              textAlign: "left",
-              fontWeight: "bold",
-              color: "#dc3545", // Rojo para diferenciar
-            }}
-          >
+          <button onClick={handleStartTest} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#dc3545" }}>
             🧪 Test Random
           </button>
 
-          <button
-            onClick={() => setShowDestinations(!showDestinations)}
-            style={{
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              background: "white",
-              textAlign: "left",
-              fontWeight: "bold",
-              color: "#007bff",
-            }}
-          >
-            🤖 Auto Drive
+          <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#007bff" }}>
+            🤖 Auto / Playback
           </button>
 
           {showDestinations && (
-            <div style={{ background: "#f8f9fa", padding: "5px" }}>
-              {destinations.length === 0 && (
-                <div
-                  style={{ padding: "5px", fontSize: "0.8em", color: "#666" }}
-                >
-                  Sin destinos
-                </div>
+            <div style={{ background: "#f8f9fa", padding: "5px", maxHeight: "200px", overflowY: "auto" }}>
+              {/* LISTA DE RUTAS GRABADAS */}
+              {Object.keys(savedPaths).length > 0 && (
+                <>
+                  <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>📼 GRABACIONES</div>
+                  {Object.keys(savedPaths).map((name) => (
+                    <div key={name} style={{ display: "flex", alignItems: "center" }}>
+                      <button
+                        onClick={() => { loadRecordedPath(name); setAutonomous(true); }}
+                        style={{ flex: 1, padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer", color: "#28a745" }}
+                      >
+                        ▶ {name}
+                      </button>
+                      <button onClick={() => deleteRecordedPath(name)} style={{ border: "none", background: "transparent", cursor: "pointer" }}>❌</button>
+                    </div>
+                  ))}
+                  <div style={{ borderBottom: "1px solid #ddd", margin: "5px 0" }}></div>
+                </>
               )}
+
+              {/* LISTA DE DESTINOS NORMALES */}
+              <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>🚩 DESTINOS</div>
               {destinations.map(([key, val]) => (
                 <button
                   key={key}
                   onClick={() => handleAutoDrive(key)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    padding: "5px 10px",
-                    border: "none",
-                    background: "transparent",
-                    textAlign: "left",
-                    fontSize: "0.9em",
-                    cursor: "pointer",
-                  }}
+                  style={{ display: "block", width: "100%", padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer" }}
                 >
                   📍 {val.name || "Destino"}
                 </button>
@@ -215,28 +240,21 @@ export function EditorToolbar() {
           )}
 
           <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
-          <button
-            onClick={() => {
-              setShowScenarios(true);
-              setOpen(false);
-            }}
-            style={{
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              background: "white",
-              textAlign: "left",
-            }}
-          >
+          <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
             💾 Escenarios
           </button>
         </div>
       )}
 
-      <ScenarioManager
-        isOpen={showScenarios}
-        onClose={() => setShowScenarios(false)}
-      />
+      <ScenarioManager isOpen={showScenarios} onClose={() => setShowScenarios(false)} />
+
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

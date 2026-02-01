@@ -27,6 +27,11 @@ export const useStore = create((set) => ({
   targetDestination: null,
   testConfig: { active: false, remaining: 0 }, // Modo Test Aleatorio
 
+  // --- GRABACIÓN DE RUTAS (Teach & Repeat) ---
+  isRecording: false,
+  recordedPath: [], // Buffer temporal
+  savedPaths: {}, // Persistencia en memoria (nombre -> path[])
+
   // --- ACCIONES DE EDICIÓN ---
   setTool: (tool) => set({ selectedTool: tool }),
   setGridObject: (x, z, type, metadata = {}) =>
@@ -64,6 +69,37 @@ export const useStore = create((set) => ({
   setTargetDestination: (dest) => set({ targetDestination: dest }),
   setTestConfig: (config) =>
     set((state) => ({ testConfig: { ...state.testConfig, ...config } })),
+
+  // --- ACCIONES DE GRABACIÓN ---
+  setRecording: (active) => set({ isRecording: active, recordedPath: active ? [] : [] }),
+  addRecordedPoint: (pt) =>
+    set((state) => ({ recordedPath: [...state.recordedPath, pt] })),
+
+  saveRecordedPath: (name) =>
+    set((state) => ({
+      savedPaths: { ...state.savedPaths, [name]: state.recordedPath },
+      isRecording: false,
+      currentPath: state.recordedPath // Opcional: mostrar lo que acabamos de grabar
+    })),
+
+  loadRecordedPath: (name) =>
+    set((state) => {
+      const path = state.savedPaths[name];
+      if (!path) return {};
+      return {
+        currentPath: path,
+        isAutonomous: false, // No arrancar automático todavía, el usuario decide
+        targetDestination: { name: `Grabación: ${name}` }
+      };
+    }),
+
+  deleteRecordedPath: (name) =>
+    set((state) => {
+      const newSaved = { ...state.savedPaths };
+      delete newSaved[name];
+      return { savedPaths: newSaved };
+    }),
+
   setTargetPoint: (pt) => set({ targetPoint: pt }),
   targetPoint: null, // Punto objetivo actual del controlador
 }));
