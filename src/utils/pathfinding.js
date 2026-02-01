@@ -1,7 +1,7 @@
 import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno solo -> de  10grados a 20 grados lo toma como lo mismo.
-const STEER_STEPS = [-0.6, 0, 0.6]; //los angulos que va a tomar para calcular el siguiente nodo, desde donde esta parado
+const STEER_STEPS = [-0.5, -0.25, 0, 0.25, 0.5]; // MAURI: Limitamos al 50% de giro para obligar a curvas abiertas
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
 // MAURI: Factor de peso BASE para la Heurística (h).
@@ -155,16 +155,17 @@ export async function findPathAsync(
 
     // 1. Lógica de Avance (d: 1)
     // --- OPCIONES PARA IR HACIA ADELANTE (d: 1) ---
+    // --- OPCIONES PARA IR HACIA ADELANTE (d: 1) ---
     if (curr.direction === -1) {
       // CAMBIO DE MARCHA: Si venía de atrás, para ir adelante...
       nextMoves.push({ d: 1, s: 0 }); // Opción 1: Salir recto
       // MAURI FIX: Opción 2: Salir con la misma curva (Retracing) - Permite "V" suaves
       if (curr.steer !== 0) nextMoves.push({ d: 1, s: curr.steer });
     } else {
-      // CONTINUIDAD: Si ya venía de adelante, puede usar los 3 giros
-      nextMoves.push({ d: 1, s: STEER_STEPS[0] });
-      nextMoves.push({ d: 1, s: STEER_STEPS[1] });
-      nextMoves.push({ d: 1, s: STEER_STEPS[2] });
+      // CONTINUIDAD: Si ya venía de adelante, usa TODOS los pasos definidos
+      for (const s of STEER_STEPS) {
+        nextMoves.push({ d: 1, s });
+      }
     }
 
     // --- OPCIONES PARA IR HACIA ATRÁS (d: -1) ---
@@ -174,10 +175,10 @@ export async function findPathAsync(
       // MAURI FIX: Opción 2: Salir con la misma curva (Retracing)
       if (curr.steer !== 0) nextMoves.push({ d: -1, s: curr.steer });
     } else {
-      // CONTINUIDAD: Si ya venía de atrás, puede usar los 3 giros en reversa
-      nextMoves.push({ d: -1, s: STEER_STEPS[0] });
-      nextMoves.push({ d: -1, s: STEER_STEPS[1] });
-      nextMoves.push({ d: -1, s: STEER_STEPS[2] });
+      // CONTINUIDAD: Si ya venía de atrás, usa TODOS los pasos definidos
+      for (const s of STEER_STEPS) {
+        nextMoves.push({ d: -1, s });
+      }
     }
 
     for (const move of nextMoves) {
@@ -195,9 +196,9 @@ export async function findPathAsync(
         continue;
 
       // MAURI: "Tunnel Vision Config"
-      // Steering Cost 2.5: Forzamos lineas rectas (centro del camino).
+      //steering penalty reduced from 10 to 2 to allow smoother curves
       const moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * 10.0) + Math.abs(s) * 10;
+        (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 2;
       const nextG = curr.g + moveCost;
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
@@ -239,7 +240,7 @@ function smoothPath(path, gridData, cellSize) {
 
   // Hacemos una copia para no mutar mientras leemos
   let smoothed = [...path];
-  const iterations = 6; // MAURI: Aumentamos a 6 pasadas para "lijar" bien esos picos
+  const iterations = 10; // MAURI: 10 pasadas es suficiente con los nuevos pasos de giro
   const weightCurrent = 0.4;
   const weightNeighbors = 0.3; // Pesos más agresivos para los vecinos
 

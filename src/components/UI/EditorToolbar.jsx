@@ -19,6 +19,7 @@ export function EditorToolbar() {
   const setExplored = useStore((state) => state.setExplored); // Para debug visual
   const setAutonomous = useStore((state) => state.setAutonomous);
   const setTargetDestination = useStore((state) => state.setTargetDestination);
+  const setTestConfig = useStore((state) => state.setTestConfig);
 
   const tools = [
     { id: "none", label: "✋ Navegar", color: "#666" },
@@ -72,6 +73,27 @@ export function EditorToolbar() {
     } finally {
       setIsCalculating(false);
     }
+  };
+
+  const handleStartTest = () => {
+    const countStr = prompt("¿Cuántos destinos aleatorios quieres testear?", "5");
+    const count = parseInt(countStr);
+    if (!count || count <= 0) return;
+
+    const destEntries = Object.entries(gridData).filter(
+      ([k, v]) => v.type === "destination"
+    );
+    if (destEntries.length === 0) {
+      alert("No hay destinos en el mapa.");
+      return;
+    }
+
+    // Activamos modo test
+    setTestConfig({ active: true, remaining: count }); // El primero cuenta como el actual
+
+    // Elegimos el primero al azar y arrancamos
+    const randomIdx = Math.floor(Math.random() * destEntries.length);
+    handleAutoDrive(destEntries[randomIdx][0]);
   };
 
   const destinations = Object.entries(gridData).filter(
@@ -131,6 +153,21 @@ export function EditorToolbar() {
           ))}
 
           <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+
+          <button
+            onClick={handleStartTest}
+            style={{
+              padding: "10px 20px",
+              border: "none",
+              cursor: "pointer",
+              background: "white",
+              textAlign: "left",
+              fontWeight: "bold",
+              color: "#dc3545", // Rojo para diferenciar
+            }}
+          >
+            🧪 Test Random
+          </button>
 
           <button
             onClick={() => setShowDestinations(!showDestinations)}

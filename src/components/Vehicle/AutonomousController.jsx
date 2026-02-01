@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useStore } from "../../store/useStore";
+import { findPathAsync } from "../../utils/pathfinding"; // Importar pathfinding
 
 export function AutonomousController() {
   // Extraemos el estado y las funciones del store global (Zustand)
@@ -12,6 +13,13 @@ export function AutonomousController() {
     setThrottle,
     setDirection,
     setAutonomous,
+    testConfig,
+    setTestConfig,
+    setPath,
+    setExplored,
+    setTargetDestination,
+    gridData,
+    GRID_SIZE,
   } = useStore();
 
   // Referencia para saber en qué punto de la ruta (índice) estamos actualmente
@@ -21,6 +29,51 @@ export function AutonomousController() {
   useEffect(() => {
     if (!isAutonomous) currentIndex.current = 0;
   }, [isAutonomous]); //el array vacio hace que se ejecute solo una vez al montar el componente, si tiene una variable, se ejecuta cada vez que cambie, puede terner mas deuna
+
+  // Función Helper para iniciar siguiente tramo
+  const startNextTestLeg = async () => {
+    // Buscar todos los destinos
+    const destinations = Object.entries(gridData).filter(
+      ([k, v]) => v.type === "destination"
+    );
+
+    if (destinations.length === 0) return;
+
+    // Elegir uno al azar (idealmente distinto al actual, pero random es random)
+    const randomIdx = Math.floor(Math.random() * destinations.length);
+    const [destKey, destVal] = destinations[randomIdx];
+    const [destX, destZ] = destKey.split(",").map(Number);
+
+    console.log(`[TEST] Iniciando tramo hacia: ${destVal.name || "Destino"} (${destX}, ${destZ})`);
+
+    // Calcular ruta
+    // Usamos el estado actual del vehiculo (que ya está frenado)
+    // OJO: vehicleState puede no estar actualizado al milisegundo en el closure, 
+    // pero para el inicio está bien.
+    const currentVacc = useStore.getState().vehicleState;
+
+    try {
+      const result = await findPathAsync(
+        { x: currentVacc.x, z: currentVacc.z, heading: currentVacc.heading },
+        { x: destX, z: destZ },
+        gridData,
+        GRID_SIZE,
+        (explored) => setExplored(explored)
+      );
+
+      if (result.path) {
+        setPath(result.path);
+        setExplored(result.explored);
+        setTargetDestination(destVal);
+        setAutonomous(true); // Reactivar
+      } else {
+        console.error("[TEST] Falló ruta. Reintentando otro...");
+        // Podríamos reintentar recursivamente con limite
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // useFrame corre en cada frame de la simulación (aprox 60fps)
   useFrame(() => {
@@ -66,8 +119,29 @@ export function AutonomousController() {
       setThrottle(0);
       setSteering(0);
       setAutonomous(false); // Apagar modo autónomo
+
+      // --- LÓGICA DE TEST AUTOMÁTICO ---
+      if (testConfig.active && testConfig.remaining > 0) {
+        console.log(`[TEST] Destino alcanzado. Restantes: ${testConfig.remaining}`);
+
+        // 1. Descontar contador
+        const nextRemaining = testConfig.remaining - 1;
+        setTestConfig({ remaining: nextRemaining });
+
+        if (nextRemaining > 0) {
+          // 2. Elegir siguiente destino al azar y reiniciar
+          setTimeout(() => {
+            startNextTestLeg();
+          }, 1000); // Esperar 1seg antes de salir
+        } else {
+          setTestConfig({ active: false });
+          console.log("[TEST] Prueba finalizada.");
+        }
+      }
       return;
     }
+
+
 
     // --- LÓGICA DE LOOKAHEAD (Mirar hacia adelante) ---
     // Buscamos un punto un poco más adelante para que el giro sea suave
@@ -87,20 +161,33 @@ export function AutonomousController() {
     const currentDir = currentPath[currentIndex.current].direction;
 
     // Recorremos la ruta hacia adelante para encontrar el punto que está a la distancia LOOKAHEAD
+    // MAURI FIX: Si el tramo es corto (maniobra), nos limitamos a buscar HASTA el cambio de dirección.
+    // Si no encontramos un punto a LOOKAHEAD_DIST antes del cambio, apuntamos al ÚLTIMO punto del tramo.
+    let foundLookahead = false;
+
     for (let i = currentIndex.current; i < currentPath.length; i++) {
-      // No podemos mirar puntos que tengan una marcha distinta (ej. no mirar reversa si voy adelante)
+      // DETECCIÓN DE CAMBIO DE TRAMO
       if (currentPath[i].direction !== currentDir) {
+        // Llegamos al final del tramo actual sin encontrar un punto lejano.
+        // Para no quedar "ciegos" o mirando al pasado, apuntamos al FINAL EXACTO del tramo.
+        // Esto obliga al auto a alinearse con el eje hasta el último centímetro.
+        lookaheadIndex = Math.max(currentIndex.current, i - 1);
+        foundLookahead = true; // Forzamos flag para no seguir buscando
         break;
       }
 
-      const p = currentPath[i]; //empieza por el primero que es donde esta el auto, y se va alejando
+      const p = currentPath[i];
       const d = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
+
       if (d >= LOOKAHEAD_DIST) {
-        //busca el optimo, que es el primero que supere el lookahed dist
         lookaheadIndex = i;
+        foundLookahead = true;
         break;
       }
-      lookaheadIndex = i; //setea dentro de los evaluados el que mas lejos esta del auto, y no supera lookahed dist
+
+      // Si no cumple distancia, seguimos avanzando el índice candidato
+      // (Por defecto apuntamos a lo más lejos posible dentro del tramo)
+      lookaheadIndex = i;
     }
 
     // Este es nuestro "punto objetivo" real hacia el cual vamos a girar

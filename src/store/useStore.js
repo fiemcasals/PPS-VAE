@@ -25,6 +25,7 @@ export const useStore = create((set) => ({
   currentPath: [],
   exploredNodes: [], // Nuevo: para ver la nube de puntos de búsqueda
   targetDestination: null,
+  testConfig: { active: false, remaining: 0 }, // Modo Test Aleatorio
 
   // --- ACCIONES DE EDICIÓN ---
   setTool: (tool) => set({ selectedTool: tool }),
@@ -61,6 +62,8 @@ export const useStore = create((set) => ({
   setExplored: (nodes) => set({ exploredNodes: nodes }),
   setExplored: (nodes) => set({ exploredNodes: nodes }),
   setTargetDestination: (dest) => set({ targetDestination: dest }),
+  setTestConfig: (config) =>
+    set((state) => ({ testConfig: { ...state.testConfig, ...config } })),
   setTargetPoint: (pt) => set({ targetPoint: pt }),
   targetPoint: null, // Punto objetivo actual del controlador
 }));
