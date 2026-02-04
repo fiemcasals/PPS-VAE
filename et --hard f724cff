@@ -1,0 +1,23 @@
+[33m36e958d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mveinteDestinosAlcanzados[m[33m)[m HEAD@{0}: reset: moving to HEAD~1
+[33mf724cff[m HEAD@{1}: commit: cuartel listo-se pierder es demasiado grande
+[33m36e958d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mveinteDestinosAlcanzados[m[33m)[m HEAD@{2}: commit: agregamos graficos
+[33m2fcee2e[m HEAD@{3}: commit: auto/playback
+[33m2c17497[m[33m ([m[1;31morigin/veinteDestinosAlcanzados[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{4}: checkout: moving from master to veinteDestinosAlcanzados
+[33m2c17497[m[33m ([m[1;31morigin/veinteDestinosAlcanzados[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{5}: commit: 20 destinos s/n
+[33m18eda35[m HEAD@{6}: commit: correccion fina
+[33m7c7c05d[m HEAD@{7}: commit: 5 destinos con 5to camino demasiado fino
+[33mb670ad4[m HEAD@{8}: commit: agregue un destino mas
+[33m6fd4ce8[m HEAD@{9}: commit: pierde el recorrido cuando acelera mucho y hay una curva, tengo que aumentar el rozamiento o que vea que se aproxima una curva y baje la velocidad
+[33mc7ba964[m HEAD@{10}: reset: moving to c7ba964
+[33m2a4a67d[m HEAD@{11}: reset: moving to HEAD~1
+[33mc7ba964[m HEAD@{12}: reset: moving to HEAD~1
+[33mb5bc0ae[m[33m ([m[1;31morigin/master[m[33m)[m HEAD@{13}: commit: funcionando, falta ver tema reversa
+[33mc7ba964[m HEAD@{14}: commit: ya logre que ande, hay un pequenio error que gira antes de frenar, al cambiar la marcha
+[33m2a4a67d[m HEAD@{15}: commit: mas suave el trayecto - llega a destino
+[33mc751b24[m HEAD@{16}: commit: trayecto perfecto-pierde el camino
+[33m7e9ecd3[m HEAD@{17}: commit: falta mejorar el algoritmo de navegacion
+[33mb9c9419[m HEAD@{18}: commit: feat: adjust vehicle physics, orientation and telemetry
+[33mebc3f3c[m HEAD@{19}: commit: docs: add README with launch instructions
+[33m88c63f7[m HEAD@{20}: commit: fix: camera controller reference error and improvements
+[33m61b3c1b[m HEAD@{21}: commit: feat: modularize world components and add project context
+[33m96bec73[m HEAD@{22}: commit (initial): Primer commit: Estructura de Vite para el VAE

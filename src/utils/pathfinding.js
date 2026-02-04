@@ -201,8 +201,20 @@ export async function findPathAsync(
       // MAURI: "Tunnel Vision Config"
       // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
       // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
-      const moveCost =
+      let moveCost =
         (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 20;
+
+      // MAURI: Parking Penalty
+      // Si la celda destino es un "parking", multiplicamos el costo por 5.
+      // Esto hace que el auto prefiera la calle (road) aunque sea más largo,
+      // y solo entre al parking si es el destino final o no hay otra opción.
+      const cx = Math.floor(nextX / cellSize) * cellSize + cellSize / 2;
+      const cz = Math.floor(nextZ / cellSize) * cellSize + cellSize / 2;
+      const nextCell = gridData[`${cx},${cz}`];
+      if (nextCell && nextCell.type === "parking") {
+        moveCost *= 5.0;
+      }
+
       const nextG = curr.g + moveCost;
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).

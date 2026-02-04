@@ -32,6 +32,10 @@ export function EditorToolbar() {
   // Submenú de construcciones
   const [showConstruction, setShowConstruction] = useState(false);
 
+  // Submenú de Itinerarios (Derecha)
+  const [showItineraries, setShowItineraries] = useState(false);
+  const [itinerary, setItinerary] = useState([]); // Array of keys
+
   // Tools definitions
   const constructionTools = [
     { id: "road", label: "🛣️ Camino (Arrastrar)", color: "#333" },
@@ -74,13 +78,87 @@ export function EditorToolbar() {
         setExplored(result.explored);
         setTargetDestination(dest);
         setAutonomous(true);
-        setOpen(false);
+        // setOpen(false); // Mantener abierto para seguir operando si se quiere
+        setShowDestinations(false); // Cerrar panel de destinos al iniciar
       } else {
         setExplored(result.explored);
         alert("Fallo en la navegación. Revisa obstáculos.");
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  const handleItineraryDrive = async () => {
+    if (isCalculating || itinerary.length === 0) return;
+    setIsCalculating(true);
+    setExplored([]);
+    setPath([]);
+
+    // Obtener estado inicial
+    const { vehicleState } = useStore.getState();
+    // Simular posición de inicio para el encadenamiento
+    let currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
+
+    let fullPath = [];
+    let fullExplored = [];
+
+    try {
+      for (let i = 0; i < itinerary.length; i++) {
+        const destKey = itinerary[i];
+        const dest = gridData[destKey];
+        if (!dest) continue;
+
+        const [destX, destZ] = destKey.split(",").map(Number);
+
+        // Calcular tramo
+        const result = await findPathAsync(
+          currentStart,
+          { x: destX, z: destZ },
+          gridData,
+          GRID_SIZE,
+          // Solo mostramos explorados del tramo actual para no saturar, o podríamos acumular
+          (exploredNodes) => setExplored(exploredNodes)
+        );
+
+        if (result.path && result.path.length > 0) {
+          fullPath = [...fullPath, ...result.path];
+          fullExplored = [...fullExplored, ...result.explored];
+
+          // Actualizar 'Start' para el siguiente tramo (último punto del path actual)
+          const lastPoint = result.path[result.path.length - 1];
+          // Calcular heading basado en los últimos puntos para mantener continuidad
+          let newHeading = currentStart.heading;
+          if (result.path.length >= 2) {
+            const prevPoint = result.path[result.path.length - 2];
+            // Math.atan2(x, z) porque en este sistema 0 es Norte (+Z) aparentemente, o hay que chequear.
+            // En pathfinding.js: nextX = ... sin(theta), nextZ = ... cos(theta).
+            // Entonces x = sin, z = cos.
+            // tan(theta) = x / z. -> theta = atan2(x, z).
+            newHeading = Math.atan2(lastPoint.x - prevPoint.x, lastPoint.z - prevPoint.z);
+          }
+          currentStart = { x: lastPoint.x, z: lastPoint.z, heading: newHeading };
+
+        } else {
+          console.warn(`No se pudo trazar ruta al destino intermedio: ${destKey}`);
+          alert(`No se pudo llegar a ${dest.name || "destino"}. abortando itinerario.`);
+          break;
+        }
+      }
+
+      if (fullPath.length > 0) {
+        setPath(fullPath);
+        setExplored(fullExplored); // Quizás mostrar todo lo explorado al final
+        setAutonomous(true);
+        // setOpen(false);
+        setShowItineraries(false);
+      }
+
+    } catch (e) {
+      console.error(e);
+      alert("Error calculando itinerario");
     } finally {
       setIsCalculating(false);
     }
@@ -233,44 +311,15 @@ export function EditorToolbar() {
               🧪 Test Random
             </button>
 
-            <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", fontWeight: "bold", color: "#007bff" }}>
-              🤖 Auto / Playback
+            <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showDestinations ? "#e6f7ff" : "white", textAlign: "left", fontWeight: "bold", color: "#007bff", display: "flex", justifyContent: "space-between", borderLeft: showDestinations ? "3px solid #007bff" : "none" }}>
+              <span>📍 Destinos</span>
+              <span>{showDestinations ? "▶" : "▶"}</span>
             </button>
 
-            {showDestinations && (
-              <div style={{ background: "#f8f9fa", padding: "5px", maxHeight: "200px", overflowY: "auto" }}>
-                {/* LISTA DE RUTAS GRABADAS */}
-                {Object.keys(savedPaths).length > 0 && (
-                  <>
-                    <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>📼 GRABACIONES</div>
-                    {Object.keys(savedPaths).map((name) => (
-                      <div key={name} style={{ display: "flex", alignItems: "center" }}>
-                        <button
-                          onClick={() => { loadRecordedPath(name); setAutonomous(true); }}
-                          style={{ flex: 1, padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer", color: "#28a745" }}
-                        >
-                          ▶ {name}
-                        </button>
-                        <button onClick={() => deleteRecordedPath(name)} style={{ border: "none", background: "transparent", cursor: "pointer" }}>❌</button>
-                      </div>
-                    ))}
-                    <div style={{ borderBottom: "1px solid #ddd", margin: "5px 0" }}></div>
-                  </>
-                )}
-
-                {/* LISTA DE DESTINOS NORMALES */}
-                <div style={{ fontSize: "0.8em", color: "#666", padding: "2px 5px" }}>🚩 DESTINOS</div>
-                {destinations.map(([key, val]) => (
-                  <button
-                    key={key}
-                    onClick={() => handleAutoDrive(key)}
-                    style={{ display: "block", width: "100%", padding: "5px 10px", border: "none", background: "transparent", textAlign: "left", fontSize: "0.9em", cursor: "pointer" }}
-                  >
-                    📍 {val.name || "Destino"}
-                  </button>
-                ))}
-              </div>
-            )}
+            <button onClick={() => setShowItineraries(!showItineraries)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showItineraries ? "#f3e5f5" : "white", textAlign: "left", fontWeight: "bold", color: "#9c27b0", display: "flex", justifyContent: "space-between", borderLeft: showItineraries ? "3px solid #9c27b0" : "none" }}>
+              <span>🗺️ Itinerarios</span>
+              <span>{showItineraries ? "▶" : "▶"}</span>
+            </button>
 
             <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
             <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
@@ -326,6 +375,109 @@ export function EditorToolbar() {
               ))}
             </div>
           )}
+
+          {/* SUBMENÚ LATERAL DE DESTINOS */}
+          {showDestinations && !isRecording && (
+            <div style={{
+              background: "white", borderRadius: "8px", padding: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+              minWidth: "200px", maxHeight: "400px", overflowY: "auto", border: "1px solid #ddd"
+            }}>
+              <h4 style={{ margin: "0 0 10px 0", fontSize: "0.9em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>📍 Seleccionar Destino</h4>
+              {destinations.length === 0 && <p style={{ fontSize: "0.8em", color: "#999" }}>No hay destinos creados.</p>}
+              {destinations.map(([key, val]) => (
+                <button
+                  key={key}
+                  onClick={() => handleAutoDrive(key)}
+                  style={{
+                    display: "block", width: "100%", padding: "8px", marginBottom: "5px",
+                    border: "1px solid #eee", borderRadius: "5px", background: "#f8f9fa",
+                    textAlign: "left", cursor: "pointer", fontSize: "0.9em"
+                  }}
+                >
+                  {val.name || "Destino sin nombre"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* SUBMENÚ LATERAL DE ITINERARIOS */}
+          {showItineraries && !isRecording && (
+            <div style={{
+              background: "white", borderRadius: "8px", padding: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+              minWidth: "220px", maxHeight: "500px", overflowY: "auto", border: "1px solid #ddd"
+            }}>
+              <h4 style={{ margin: "0 0 10px 0", fontSize: "0.9em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>🗺️ Crear Itinerario</h4>
+
+              {/* 1. SELECCIÓN */}
+              <div style={{ marginBottom: "15px" }}>
+                <p style={{ fontSize: "0.8em", fontWeight: "bold", margin: "5px 0" }}>Agregar Destinos:</p>
+                <div style={{ maxHeight: "150px", overflowY: "auto", border: "1px solid #eee", borderRadius: "4px" }}>
+                  {destinations.map(([key, val]) => (
+                    <button
+                      key={key}
+                      onClick={() => setItinerary([...itinerary, key])}
+                      style={{
+                        display: "flex", justifyContent: "space-between", width: "100%", padding: "5px",
+                        border: "none", borderBottom: "1px solid #eee", background: "white",
+                        textAlign: "left", cursor: "pointer", fontSize: "0.85em"
+                      }}
+                    >
+                      <span>📍 {val.name || "Destino"}</span>
+                      <span style={{ color: "green" }}>+</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. LISTA ACTUAL */}
+              <div style={{ marginBottom: "15px" }}>
+                <p style={{ fontSize: "0.8em", fontWeight: "bold", margin: "5px 0" }}>Ruta Actual:</p>
+                {itinerary.length === 0 && <p style={{ fontSize: "0.8em", color: "#999", fontStyle: "italic" }}>Vacío...</p>}
+
+                {itinerary.map((key, idx) => {
+                  const destObj = gridData[key];
+                  return (
+                    <div key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "4px", background: "#f1f8e9", padding: "4px", borderRadius: "4px" }}>
+                      <span style={{ fontSize: "0.8em", fontWeight: "bold", marginRight: "5px" }}>{idx + 1}.</span>
+                      <span style={{ fontSize: "0.85em", flex: 1 }}>{destObj?.name || "Desconocido"}</span>
+                      <button
+                        onClick={() => {
+                          const newIt = [...itinerary];
+                          newIt.splice(idx, 1);
+                          setItinerary(newIt);
+                        }}
+                        style={{ border: "none", background: "transparent", color: "red", cursor: "pointer", fontWeight: "bold" }}
+                      >
+                        x
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 3. ACCIONES */}
+              <div style={{ display: "flex", gap: "5px" }}>
+                <button
+                  onClick={handleItineraryDrive}
+                  disabled={itinerary.length === 0 || isCalculating}
+                  style={{
+                    flex: 1, padding: "8px", background: isCalculating ? "#ccc" : "#4caf50", color: "white",
+                    border: "none", borderRadius: "5px", cursor: isCalculating ? "wait" : "pointer", fontWeight: "bold"
+                  }}
+                >
+                  {isCalculating ? "Calculando..." : "▶ INICIAR"}
+                </button>
+                <button
+                  onClick={() => setItinerary([])}
+                  style={{ padding: "8px", background: "#f44336", color: "white", border: "none", borderRadius: "5px", cursor: "pointer" }}
+                  title="Borrar todo"
+                >
+                  🗑️
+                </button>
+              </div>
+
+            </div>
+          )}
         </div>
       )}
 
@@ -338,6 +490,6 @@ export function EditorToolbar() {
           100% { transform: scale(1); }
         }
       `}</style>
-    </div>
+    </div >
   );
 }

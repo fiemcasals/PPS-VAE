@@ -147,7 +147,13 @@ export function AutonomousController() {
     // Buscamos un punto un poco más adelante para que el giro sea suave
     // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
     const isManuever = nextNode && nextNode.direction !== node.direction;
-    let LOOKAHEAD_DIST = isManuever ? 0.2 : 1.8; // MAURI: Bajamos a 1.8 para "ceñir" más el auto a la línea
+    // MAURI: Dynamic Lookahead
+    // Base 2.0m + 0.5m por cada m/s de velocidad. Max 6.0m.
+    // Esto evita que el auto zigzaguee (overcorrect) a altas velocidades.
+    let dynamicLookahead = 2.0 + Math.abs(vehicleState.speed) * 0.5;
+    if (dynamicLookahead > 6.0) dynamicLookahead = 6.0;
+
+    let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
 
     // Si estamos empezando, miramos más cerca para no saltarnos curvas cerradas iniciales
     if (currentIndex.current < 5) {
