@@ -202,7 +202,7 @@ export async function findPathAsync(
       // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
       // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
       let moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 20;
+        (d === 1 ? STEP_SIZE : STEP_SIZE * 30.0) + Math.abs(s) * 20;
 
       // MAURI: Parking Penalty
       // Si la celda destino es un "parking", multiplicamos el costo por 5.
