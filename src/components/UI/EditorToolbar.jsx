@@ -1,14 +1,19 @@
 import React, { useState } from "react";
 import { useStore } from "../../store/useStore";
 import { ScenarioManager } from "./ScenarioManager";
+import { PathManager } from "./PathManager";
 // Importamos la versión ASYNC del buscador para no congelar la pantalla
 import { findPathAsync } from "../../utils/pathfinding";
 
 export function EditorToolbar() {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
+  const [showPaths, setShowPaths] = useState(false); // Estado para PathManager
   const [showDestinations, setShowDestinations] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
+  // ... (omitting lines for brevity in prompt, but in tool call I must be precise or use multiple chunks)
+  // I will use multi_replace to be safe and cleaner.
+
 
   // Acciones y estado del Store
   const selectedTool = useStore((state) => state.selectedTool);
@@ -274,6 +279,18 @@ export function EditorToolbar() {
               <>
                 {/* HERRAMIENTAS BÁSICAS */}
                 <button
+                  onClick={() => {
+                    setAutonomous(false);
+                    useStore.getState().setThrottle(0);
+                    useStore.getState().setSteering(0);
+                    setOpen(false);
+                  }}
+                  style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", color: "red", fontWeight: "bold" }}
+                >
+                  🛑 Detener Auto
+                </button>
+
+                <button
                   onClick={() => { setTool("none"); setOpen(false); }}
                   style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: selectedTool === "none" ? "#e0e0e0" : "white", textAlign: "left" }}
                 >
@@ -325,6 +342,9 @@ export function EditorToolbar() {
             <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
             <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
               💾 Escenarios
+            </button>
+            <button onClick={() => { setShowPaths(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
+              📀 Rutas
             </button>
           </div>
 
@@ -483,6 +503,7 @@ export function EditorToolbar() {
       )}
 
       <ScenarioManager isOpen={showScenarios} onClose={() => setShowScenarios(false)} />
+      <PathManager isOpen={showPaths} onClose={() => setShowPaths(false)} />
 
       <style>{`
         @keyframes pulse {

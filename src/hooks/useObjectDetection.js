@@ -45,7 +45,13 @@ export function useObjectDetection(sourceRef, isActive = true, threshold = 0.5) 
                 try {
                     // Ajustamos threshold dinámicamente
                     const preds = await model.detect(sourceRef.current, 20, threshold);
-                    setPredictions(preds);
+
+                    // FILTRO: Solo detectamos personas (Activo)
+                    const personPreds = preds.filter(p => p.class === "person");
+                    setPredictions(personPreds);
+
+                    // TODO: Descomentar para detectar todo
+                    // setPredictions(preds);
                 } catch (e) {
                     console.warn("Error en deteccion:", e);
                 }

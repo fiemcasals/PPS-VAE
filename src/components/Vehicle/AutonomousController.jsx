@@ -28,7 +28,12 @@ export function AutonomousController() {
   // Si desactivamos el modo autónomo, reseteamos el índice a 0 para la próxima vez
   useEffect(() => {
     if (!isAutonomous) currentIndex.current = 0;
-  }, [isAutonomous]); //el array vacio hace que se ejecute solo una vez al montar el componente, si tiene una variable, se ejecuta cada vez que cambie, puede terner mas deuna
+  }, [isAutonomous]);
+
+  // Resetear índice si cambia la ruta (Nueva grabación cargada o recálculo)
+  useEffect(() => {
+    currentIndex.current = 0;
+  }, [currentPath]);
 
   // Función Helper para iniciar siguiente tramo
   const startNextTestLeg = async () => {
@@ -77,6 +82,9 @@ export function AutonomousController() {
 
   // useFrame corre en cada frame de la simulación (aprox 60fps)
   useFrame(() => {
+    // LEER ESTADO FRESCO DIRECTAMENTE DEL STORE (Evitar closures viejos)
+    const { isAutonomous, currentPath, vehicleState } = useStore.getState();
+
     // Si no está en modo autónomo o no hay ruta, no hacemos nada
     if (!isAutonomous || !currentPath || currentPath.length === 0) return;
 

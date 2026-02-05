@@ -144,45 +144,89 @@ export function MapVisualizer() {
 
           return (
             <group key={key} position={[x, 0, z]}>
-              {/* --- PIERNAS --- */}
+              {/* --- PIERNAS Y PIES --- */}
               {/* Pierna Izquierda */}
-              <mesh position={[-0.1, 0.4, 0]}>
-                <boxGeometry args={[0.08, 0.8, 0.1]} />
-                <meshStandardMaterial color={pantsColor} />
-              </mesh>
-              {/* Pierna Derecha */}
-              <mesh position={[0.1, 0.4, 0]}>
-                <boxGeometry args={[0.08, 0.8, 0.1]} />
-                <meshStandardMaterial color={pantsColor} />
-              </mesh>
+              <group position={[-0.1, 0.4, 0]}>
+                <mesh>
+                  <boxGeometry args={[0.09, 0.8, 0.12]} />
+                  <meshStandardMaterial color={pantsColor} />
+                </mesh>
+                {/* Pie Izquierdo (Zapato) */}
+                <mesh position={[0, -0.42, 0.05]}>
+                  <boxGeometry args={[0.095, 0.08, 0.22]} />
+                  <meshStandardMaterial color="#111" />
+                </mesh>
+              </group>
 
-              {/* --- TORSO --- */}
-              <mesh position={[0, 1.1, 0]}>
-                <boxGeometry args={[0.3, 0.6, 0.15]} />
+              {/* Pierna Derecha */}
+              <group position={[0.1, 0.4, 0]}>
+                <mesh>
+                  <boxGeometry args={[0.09, 0.8, 0.12]} />
+                  <meshStandardMaterial color={pantsColor} />
+                </mesh>
+                {/* Pie Derecho (Zapato) */}
+                <mesh position={[0, -0.42, 0.05]}>
+                  <boxGeometry args={[0.095, 0.08, 0.22]} />
+                  <meshStandardMaterial color="#111" />
+                </mesh>
+              </group>
+
+              {/* --- TORSO (Más ancho) --- */}
+              <mesh position={[0, 1.15, 0]}>
+                <boxGeometry args={[0.34, 0.7, 0.16]} />
                 <meshStandardMaterial color={shirtColor} />
               </mesh>
 
-              {/* --- BRAZOS (Piel visible para detección) --- */}
+              {/* --- BRAZOS Y MANOS --- */}
               {/* Brazo Izquierdo */}
-              <mesh position={[-0.2, 1.1, 0]}>
-                <boxGeometry args={[0.08, 0.55, 0.08]} />
-                <meshStandardMaterial color={skinColor} />
-              </mesh>
-              {/* Brazo Derecho */}
-              <mesh position={[0.2, 1.1, 0]}>
-                <boxGeometry args={[0.08, 0.55, 0.08]} />
-                <meshStandardMaterial color={skinColor} />
-              </mesh>
+              <group position={[-0.24, 1.25, 0]}>
+                <mesh rotation={[0, 0, 0.1]}>
+                  <boxGeometry args={[0.09, 0.5, 0.1]} />
+                  <meshStandardMaterial color={shirtColor} /> {/* Manga */}
+                </mesh>
+                <mesh position={[-0.03, -0.4, 0]}>
+                  <boxGeometry args={[0.08, 0.35, 0.08]} />
+                  <meshStandardMaterial color={skinColor} /> {/* Antebrazo */}
+                </mesh>
+                {/* Mano */}
+                <mesh position={[-0.03, -0.6, 0]}>
+                  <sphereGeometry args={[0.05, 8, 8]} />
+                  <meshStandardMaterial color={skinColor} />
+                </mesh>
+              </group>
 
-              {/* --- CABEZA --- */}
-              <mesh position={[0, 1.55, 0]}>
-                <boxGeometry args={[0.15, 0.25, 0.15]} /> {/* Boxhead style or sphere */}
+              {/* Brazo Derecho */}
+              <group position={[0.24, 1.25, 0]}>
+                <mesh rotation={[0, 0, -0.1]}>
+                  <boxGeometry args={[0.09, 0.5, 0.1]} />
+                  <meshStandardMaterial color={shirtColor} />
+                </mesh>
+                <mesh position={[0.03, -0.4, 0]}>
+                  <boxGeometry args={[0.08, 0.35, 0.08]} />
+                  <meshStandardMaterial color={skinColor} />
+                </mesh>
+                {/* Mano */}
+                <mesh position={[0.03, -0.6, 0]}>
+                  <sphereGeometry args={[0.05, 8, 8]} />
+                  <meshStandardMaterial color={skinColor} />
+                </mesh>
+              </group>
+
+              {/* --- CABEZA Y CUELLO --- */}
+              {/* Cuello */}
+              <mesh position={[0, 1.52, 0]}>
+                <cylinderGeometry args={[0.06, 0.06, 0.1, 8]} />
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
+              {/* Cabeza */}
+              <mesh position={[0, 1.65, 0]}>
+                <boxGeometry args={[0.2, 0.25, 0.22]} />
                 <meshStandardMaterial color={skinColor} />
               </mesh>
 
               {/* --- PELO --- */}
-              <mesh position={[0, 1.7, 0]}>
-                <boxGeometry args={[0.17, 0.1, 0.17]} />
+              <mesh position={[0, 1.78, 0]}>
+                <boxGeometry args={[0.22, 0.08, 0.24]} />
                 <meshStandardMaterial color={hairColor} />
               </mesh>
             </group>
@@ -194,198 +238,200 @@ export function MapVisualizer() {
       })}
 
       {/* 2. RENDERIZADO DE EDIFICIOS Y SUELOS */}
-      {(buildings || []).map((b) => {
-        // --- SUELO (Baldosas) ---
-        if (b.type === "floor") {
+      {
+        (buildings || []).map((b) => {
+          // --- SUELO (Baldosas) ---
+          if (b.type === "floor") {
+            return (
+              <mesh key={b.id} position={[b.x, 0.02, b.z]}>
+                <boxGeometry args={[b.width, 0.05, b.depth]} />
+                <meshStandardMaterial color="#95a5a6" roughness={0.8} /> {/* Gris Baldosa */}
+              </mesh>
+            );
+          }
+
+          // --- PILETA (Agua + Trampolín) ---
+          if (b.type === "pool") {
+            return (
+              <group key={b.id} position={[b.x, 0, b.z]}>
+                {/* Agua */}
+                <mesh position={[0, 0.1, 0]}>
+                  <boxGeometry args={[b.width, 0.4, b.depth]} />
+                  <meshStandardMaterial
+                    color="#3498db"
+                    roughness={0.1}
+                    metalness={0.5}
+                    transparent
+                    opacity={0.8}
+                  />
+                </mesh>
+
+                {/* Borde (Opcional, piso alrededor apenas visible) */}
+                <mesh position={[0, 0.15, 0]}>
+                  <boxGeometry args={[b.width + 0.4, 0.1, b.depth + 0.4]} />
+                  <meshStandardMaterial color="#ecf0f1" />
+                </mesh>
+
+                {/* Volvemos a dibujar el agua un poco mas arriba para tapar el borde por dentro */}
+                <mesh position={[0, 0.2, 0]}>
+                  <boxGeometry args={[b.width, 0.25, b.depth]} />
+                  <meshStandardMaterial
+                    color="#3498db"
+                    roughness={0.1}
+                    metalness={0.5}
+                  />
+                </mesh>
+
+                {/* Trampolín (Solo si hay espacio, en el borde positivo de Z) */}
+                {b.depth > 2 && (
+                  <group position={[0, 0.5, b.depth / 2 + 0.2]}>
+                    {/* Base */}
+                    <mesh position={[0, 0, 0]}>
+                      <boxGeometry args={[0.5, 0.5, 0.5]} />
+                      <meshStandardMaterial color="#95a5a6" />
+                    </mesh>
+                    {/* Tabla */}
+                    <mesh position={[0, 0.25, -0.8]}>
+                      <boxGeometry args={[0.5, 0.1, 1.5]} />
+                      <meshStandardMaterial color="#f39c12" />
+                    </mesh>
+                  </group>
+                )}
+              </group>
+            );
+          }
+
+          // --- QUINCHO (Circular con techo de paja) ---
+          if (b.type === "quincho") {
+            const radius = Math.min(b.width, b.depth) / 2;
+            const height = 1.5; // Altura de pilares
+            const roofHeight = 1.5; // Altura del cono
+
+            return (
+              <group key={b.id} position={[b.x, 0, b.z]}>
+                {/* Piso Circular */}
+                <mesh position={[0, 0.05, 0]}>
+                  <cylinderGeometry args={[radius, radius, 0.1, 32]} />
+                  <meshStandardMaterial color="#A1887F" />
+                </mesh>
+
+                {/* Techo (Cono de paja) */}
+                <mesh position={[0, height + roofHeight / 2, 0]}>
+                  <coneGeometry args={[radius * 1.2, roofHeight, 32]} /> {/* Un poco más ancho que el piso */}
+                  <meshStandardMaterial color="#C0A062" roughness={1} /> {/* Color Paja */}
+                </mesh>
+
+                {/* Pilares (4 alrededor) */}
+                {[0, 1, 2, 3].map((i) => {
+                  const angle = (i / 4) * Math.PI * 2;
+                  const px = Math.cos(angle) * (radius * 0.8);
+                  const pz = Math.sin(angle) * (radius * 0.8);
+                  return (
+                    <mesh key={i} position={[px, height / 2, pz]}>
+                      <cylinderGeometry args={[0.08, 0.08, height, 8]} />
+                      <meshStandardMaterial color="#5D4037" /> {/* Madera Oscura */}
+                    </mesh>
+                  );
+                })}
+
+                {/* Mesa central (Opcional) */}
+                <mesh position={[0, 0.4, 0]}>
+                  <cylinderGeometry args={[radius * 0.3, radius * 0.3, 0.6, 16]} />
+                  <meshStandardMaterial color="#5D4037" />
+                </mesh>
+              </group>
+            );
+          }
+
+          // --- EDIFICIO (Galpón Militar) ---
           return (
-            <mesh key={b.id} position={[b.x, 0.02, b.z]}>
-              <boxGeometry args={[b.width, 0.05, b.depth]} />
-              <meshStandardMaterial color="#95a5a6" roughness={0.8} /> {/* Gris Baldosa */}
-            </mesh>
-          );
-        }
-
-        // --- PILETA (Agua + Trampolín) ---
-        if (b.type === "pool") {
-          return (
-            <group key={b.id} position={[b.x, 0, b.z]}>
-              {/* Agua */}
-              <mesh position={[0, 0.1, 0]}>
-                <boxGeometry args={[b.width, 0.4, b.depth]} />
-                <meshStandardMaterial
-                  color="#3498db"
-                  roughness={0.1}
-                  metalness={0.5}
-                  transparent
-                  opacity={0.8}
-                />
+            <group key={b.id} position={[b.x, b.depth > b.width ? 1.5 : 2, b.z]}>
+              {/* Cuerpo del edificio (Estilo Militar) */}
+              <mesh>
+                <boxGeometry args={[b.width, 3, b.depth]} />
+                <meshStandardMaterial color="#4b5d4b" roughness={0.9} /> {/* Verde Oliva */}
               </mesh>
 
-              {/* Borde (Opcional, piso alrededor apenas visible) */}
-              <mesh position={[0, 0.15, 0]}>
-                <boxGeometry args={[b.width + 0.4, 0.1, b.depth + 0.4]} />
-                <meshStandardMaterial color="#ecf0f1" />
+              {/* Techo (A dos aguas simulado o plano simple por ahora) */}
+              <mesh position={[0, 1.6, 0]}>
+                <boxGeometry args={[b.width + 0.2, 0.2, b.depth + 0.2]} />
+                <meshStandardMaterial color="#3e2723" />
               </mesh>
 
-              {/* Volvemos a dibujar el agua un poco mas arriba para tapar el borde por dentro */}
-              <mesh position={[0, 0.2, 0]}>
-                <boxGeometry args={[b.width, 0.25, b.depth]} />
-                <meshStandardMaterial
-                  color="#3498db"
-                  roughness={0.1}
-                  metalness={0.5}
-                />
+              {/* --- PUERTAS EN LOS 4 LADOS --- */}
+              {/* Frontal (Z+) */}
+              <mesh position={[0, -0.5, b.depth / 2 + 0.05]}>
+                <planeGeometry args={[1.5, 2]} />
+                <meshStandardMaterial color="#3e2723" />
+              </mesh>
+              {/* Trasera (Z-) */}
+              <mesh position={[0, -0.5, -b.depth / 2 - 0.05]} rotation={[0, Math.PI, 0]}>
+                <planeGeometry args={[1.5, 2]} />
+                <meshStandardMaterial color="#3e2723" />
+              </mesh>
+              {/* Derecha (X+) */}
+              <mesh position={[b.width / 2 + 0.05, -0.5, 0]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[1.5, 2]} />
+                <meshStandardMaterial color="#3e2723" />
+              </mesh>
+              {/* Izquierda (X-) */}
+              <mesh position={[-b.width / 2 - 0.05, -0.5, 0]} rotation={[0, -Math.PI / 2, 0]}>
+                <planeGeometry args={[1.5, 2]} />
+                <meshStandardMaterial color="#3e2723" />
               </mesh>
 
-              {/* Trampolín (Solo si hay espacio, en el borde positivo de Z) */}
-              {b.depth > 2 && (
-                <group position={[0, 0.5, b.depth / 2 + 0.2]}>
-                  {/* Base */}
-                  <mesh position={[0, 0, 0]}>
-                    <boxGeometry args={[0.5, 0.5, 0.5]} />
-                    <meshStandardMaterial color="#95a5a6" />
+              {/* --- VENTANAS EN LOS 4 LADOS (A los lados de las puertas) --- */}
+              {/* Frontal y Trasera (Si el ancho > 3) */}
+              {b.width > 3 && (
+                <>
+                  {/* Frontal */}
+                  <mesh position={[1.5, 0.5, b.depth / 2 + 0.06]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
                   </mesh>
-                  {/* Tabla */}
-                  <mesh position={[0, 0.25, -0.8]}>
-                    <boxGeometry args={[0.5, 0.1, 1.5]} />
-                    <meshStandardMaterial color="#f39c12" />
+                  <mesh position={[-1.5, 0.5, b.depth / 2 + 0.06]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
                   </mesh>
-                </group>
+                  {/* Trasera */}
+                  <mesh position={[1.5, 0.5, -b.depth / 2 - 0.06]} rotation={[0, Math.PI, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                  <mesh position={[-1.5, 0.5, -b.depth / 2 - 0.06]} rotation={[0, Math.PI, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                </>
+              )}
+
+              {/* Derecha e Izquierda (Si la profundidad > 3) */}
+              {b.depth > 3 && (
+                <>
+                  {/* Derecha */}
+                  <mesh position={[b.width / 2 + 0.06, 0.5, 1.5]} rotation={[0, Math.PI / 2, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                  <mesh position={[b.width / 2 + 0.06, 0.5, -1.5]} rotation={[0, Math.PI / 2, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                  {/* Izquierda */}
+                  <mesh position={[-b.width / 2 - 0.06, 0.5, 1.5]} rotation={[0, -Math.PI / 2, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                  <mesh position={[-b.width / 2 - 0.06, 0.5, -1.5]} rotation={[0, -Math.PI / 2, 0]}>
+                    <planeGeometry args={[1, 1]} />
+                    <meshStandardMaterial color="#87ceeb" />
+                  </mesh>
+                </>
               )}
             </group>
           );
-        }
-
-        // --- QUINCHO (Circular con techo de paja) ---
-        if (b.type === "quincho") {
-          const radius = Math.min(b.width, b.depth) / 2;
-          const height = 1.5; // Altura de pilares
-          const roofHeight = 1.5; // Altura del cono
-
-          return (
-            <group key={b.id} position={[b.x, 0, b.z]}>
-              {/* Piso Circular */}
-              <mesh position={[0, 0.05, 0]}>
-                <cylinderGeometry args={[radius, radius, 0.1, 32]} />
-                <meshStandardMaterial color="#A1887F" />
-              </mesh>
-
-              {/* Techo (Cono de paja) */}
-              <mesh position={[0, height + roofHeight / 2, 0]}>
-                <coneGeometry args={[radius * 1.2, roofHeight, 32]} /> {/* Un poco más ancho que el piso */}
-                <meshStandardMaterial color="#C0A062" roughness={1} /> {/* Color Paja */}
-              </mesh>
-
-              {/* Pilares (4 alrededor) */}
-              {[0, 1, 2, 3].map((i) => {
-                const angle = (i / 4) * Math.PI * 2;
-                const px = Math.cos(angle) * (radius * 0.8);
-                const pz = Math.sin(angle) * (radius * 0.8);
-                return (
-                  <mesh key={i} position={[px, height / 2, pz]}>
-                    <cylinderGeometry args={[0.08, 0.08, height, 8]} />
-                    <meshStandardMaterial color="#5D4037" /> {/* Madera Oscura */}
-                  </mesh>
-                );
-              })}
-
-              {/* Mesa central (Opcional) */}
-              <mesh position={[0, 0.4, 0]}>
-                <cylinderGeometry args={[radius * 0.3, radius * 0.3, 0.6, 16]} />
-                <meshStandardMaterial color="#5D4037" />
-              </mesh>
-            </group>
-          );
-        }
-
-        // --- EDIFICIO (Galpón Militar) ---
-        return (
-          <group key={b.id} position={[b.x, b.depth > b.width ? 1.5 : 2, b.z]}>
-            {/* Cuerpo del edificio (Estilo Militar) */}
-            <mesh>
-              <boxGeometry args={[b.width, 3, b.depth]} />
-              <meshStandardMaterial color="#4b5d4b" roughness={0.9} /> {/* Verde Oliva */}
-            </mesh>
-
-            {/* Techo (A dos aguas simulado o plano simple por ahora) */}
-            <mesh position={[0, 1.6, 0]}>
-              <boxGeometry args={[b.width + 0.2, 0.2, b.depth + 0.2]} />
-              <meshStandardMaterial color="#3e2723" />
-            </mesh>
-
-            {/* --- PUERTAS EN LOS 4 LADOS --- */}
-            {/* Frontal (Z+) */}
-            <mesh position={[0, -0.5, b.depth / 2 + 0.05]}>
-              <planeGeometry args={[1.5, 2]} />
-              <meshStandardMaterial color="#3e2723" />
-            </mesh>
-            {/* Trasera (Z-) */}
-            <mesh position={[0, -0.5, -b.depth / 2 - 0.05]} rotation={[0, Math.PI, 0]}>
-              <planeGeometry args={[1.5, 2]} />
-              <meshStandardMaterial color="#3e2723" />
-            </mesh>
-            {/* Derecha (X+) */}
-            <mesh position={[b.width / 2 + 0.05, -0.5, 0]} rotation={[0, Math.PI / 2, 0]}>
-              <planeGeometry args={[1.5, 2]} />
-              <meshStandardMaterial color="#3e2723" />
-            </mesh>
-            {/* Izquierda (X-) */}
-            <mesh position={[-b.width / 2 - 0.05, -0.5, 0]} rotation={[0, -Math.PI / 2, 0]}>
-              <planeGeometry args={[1.5, 2]} />
-              <meshStandardMaterial color="#3e2723" />
-            </mesh>
-
-            {/* --- VENTANAS EN LOS 4 LADOS (A los lados de las puertas) --- */}
-            {/* Frontal y Trasera (Si el ancho > 3) */}
-            {b.width > 3 && (
-              <>
-                {/* Frontal */}
-                <mesh position={[1.5, 0.5, b.depth / 2 + 0.06]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                <mesh position={[-1.5, 0.5, b.depth / 2 + 0.06]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                {/* Trasera */}
-                <mesh position={[1.5, 0.5, -b.depth / 2 - 0.06]} rotation={[0, Math.PI, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                <mesh position={[-1.5, 0.5, -b.depth / 2 - 0.06]} rotation={[0, Math.PI, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-              </>
-            )}
-
-            {/* Derecha e Izquierda (Si la profundidad > 3) */}
-            {b.depth > 3 && (
-              <>
-                {/* Derecha */}
-                <mesh position={[b.width / 2 + 0.06, 0.5, 1.5]} rotation={[0, Math.PI / 2, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                <mesh position={[b.width / 2 + 0.06, 0.5, -1.5]} rotation={[0, Math.PI / 2, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                {/* Izquierda */}
-                <mesh position={[-b.width / 2 - 0.06, 0.5, 1.5]} rotation={[0, -Math.PI / 2, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-                <mesh position={[-b.width / 2 - 0.06, 0.5, -1.5]} rotation={[0, -Math.PI / 2, 0]}>
-                  <planeGeometry args={[1, 1]} />
-                  <meshStandardMaterial color="#87ceeb" />
-                </mesh>
-              </>
-            )}
-          </group>
-        );
-      })}
-    </group>
+        })
+      }
+    </group >
   );
 }

@@ -51,11 +51,12 @@ export function ThresholdControl() {
                     value={value}
                     onChange={(e) => setThreshold(targetKey, parseFloat(e.target.value))}
                     style={{
-                        writingMode: "bt-lr", /* IE/Edge */
-                        WebkitAppearance: "slider-vertical", /* WebKit */
+                        writingMode: "vertical-lr",
+                        direction: "rtl",
                         width: "100%",
                         height: "100%",
                         cursor: "pointer",
+                        appearance: "auto"
                     }}
                 />
             </div>

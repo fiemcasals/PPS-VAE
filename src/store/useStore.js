@@ -93,14 +93,66 @@ export const useStore = create((set) => ({
       currentPath: state.recordedPath // Opcional: mostrar lo que acabamos de grabar
     })),
 
+  saveCurrentPath: (name) =>
+    set((state) => {
+      if (!state.currentPath || state.currentPath.length === 0) return {};
+      // Guardamos una copia profunda para evitar referencias
+      const pathCopy = JSON.parse(JSON.stringify(state.currentPath));
+      return {
+        savedPaths: { ...state.savedPaths, [name]: pathCopy }
+      };
+    }),
+
   loadRecordedPath: (name) =>
     set((state) => {
-      const path = state.savedPaths[name];
-      if (!path) return {};
+      const originalPath = state.savedPaths[name];
+      if (!originalPath || originalPath.length === 0) return {};
+
+      // 1. Obtener estado actual del vehículo
+      const { x: curX, z: curZ, heading: curHeading } = state.vehicleState;
+
+      // 2. Obtener estado inicial de la grabación (Primer punto y orientación estimada)
+      const p0 = originalPath[0];
+      // Estimamos la orientación inicial mirando al segundo punto (o siguiente distinto)
+      let recHeading = 0;
+      if (originalPath.length > 1) {
+        // Buscamos un punto un poco más adelante para tener mejor vector
+        const pNext = originalPath.find(p => Math.hypot(p.x - p0.x, p.z - p0.z) > 0.1) || originalPath[1];
+        recHeading = Math.atan2(pNext.x - p0.x, pNext.z - p0.z);
+      }
+
+      // 3. Calcular la diferencia de rotación (Delta Theta)
+      // Queremos rotar la ruta para que coincida con el heading actual
+      // Delta = Actual - Original
+      const deltaTheta = curHeading - recHeading;
+      const cosT = Math.cos(deltaTheta);
+      const sinT = Math.sin(deltaTheta);
+
+      // 4. Transformar todos los puntos
+      const transformedPath = originalPath.map(p => {
+        // Trasladar al origen (relativo a p0)
+        const relX = p.x - p0.x;
+        const relZ = p.z - p0.z;
+
+        // Rotar
+        // Formula rotación 2D: x' = x*cos - z*sin, z' = x*sin + z*cos
+        // Nota: Verificar ejes. En este sistema (X, Z), puede variar.
+        // Si fallara la orientación, probar signos opuestos en senos.
+        const rotX = relX * cosT - relZ * sinT;
+        const rotZ = relX * sinT + relZ * cosT;
+
+        // Trasladar a posición actual del auto
+        return {
+          ...p,
+          x: rotX + curX,
+          z: rotZ + curZ
+        };
+      });
+
       return {
-        currentPath: path,
-        isAutonomous: false, // No arrancar automático todavía, el usuario decide
-        targetDestination: { name: `Grabación: ${name}` }
+        currentPath: transformedPath,
+        isAutonomous: true, // Arrancar automático inmediatamente
+        targetDestination: { name: `Grabación: ${name} (Relativa)` }
       };
     }),
 
