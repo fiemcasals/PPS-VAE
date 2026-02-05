@@ -135,6 +135,60 @@ export function MapVisualizer() {
           );
         }
 
+        // PERSON (Humanoide Detallado para CV)
+        if (value.type === "person") {
+          const skinColor = "#f1c27d"; // Piel
+          const shirtColor = "#3498db"; // Ropa (Camiseta Azul)
+          const pantsColor = "#2c3e50"; // Ropa (Pantalón Oscuro)
+          const hairColor = "#3e2723"; // Pelo Marrón Oscuro
+
+          return (
+            <group key={key} position={[x, 0, z]}>
+              {/* --- PIERNAS --- */}
+              {/* Pierna Izquierda */}
+              <mesh position={[-0.1, 0.4, 0]}>
+                <boxGeometry args={[0.08, 0.8, 0.1]} />
+                <meshStandardMaterial color={pantsColor} />
+              </mesh>
+              {/* Pierna Derecha */}
+              <mesh position={[0.1, 0.4, 0]}>
+                <boxGeometry args={[0.08, 0.8, 0.1]} />
+                <meshStandardMaterial color={pantsColor} />
+              </mesh>
+
+              {/* --- TORSO --- */}
+              <mesh position={[0, 1.1, 0]}>
+                <boxGeometry args={[0.3, 0.6, 0.15]} />
+                <meshStandardMaterial color={shirtColor} />
+              </mesh>
+
+              {/* --- BRAZOS (Piel visible para detección) --- */}
+              {/* Brazo Izquierdo */}
+              <mesh position={[-0.2, 1.1, 0]}>
+                <boxGeometry args={[0.08, 0.55, 0.08]} />
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
+              {/* Brazo Derecho */}
+              <mesh position={[0.2, 1.1, 0]}>
+                <boxGeometry args={[0.08, 0.55, 0.08]} />
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
+
+              {/* --- CABEZA --- */}
+              <mesh position={[0, 1.55, 0]}>
+                <boxGeometry args={[0.15, 0.25, 0.15]} /> {/* Boxhead style or sphere */}
+                <meshStandardMaterial color={skinColor} />
+              </mesh>
+
+              {/* --- PELO --- */}
+              <mesh position={[0, 1.7, 0]}>
+                <boxGeometry args={[0.17, 0.1, 0.17]} />
+                <meshStandardMaterial color={hairColor} />
+              </mesh>
+            </group>
+          );
+        }
+
         // OBSTACULOS (Simplemente suelo bloqueado)
         return null;
       })}

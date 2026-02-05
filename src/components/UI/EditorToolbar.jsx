@@ -42,6 +42,7 @@ export function EditorToolbar() {
     { id: "parking", label: "🅿️ Estacionamiento (Arrastrar)", color: "#8d6e63" },
     { id: "destination", label: "🚩 Destino", color: "#ffcc00" },
     { id: "tree", label: "🌲 Árbol", color: "#228b22" },
+    { id: "person", label: "🧍 Persona", color: "#e91e63" },
     { id: "streetlight", label: "💡 Farola", color: "#f1c40f" },
     { id: "flag", label: "🇦🇷 Bandera", color: "#74acdf" },
     { id: "building", label: "🏭 Galpón (Arrastrar)", color: "#8b4513" },

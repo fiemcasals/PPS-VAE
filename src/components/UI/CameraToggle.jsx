@@ -6,7 +6,20 @@ export function CameraToggle() {
   const setCameraMode = useStore((state) => state.setCameraMode);
 
   const toggleMode = () => {
-    setCameraMode(cameraMode === "FOLLOW" ? "FREE" : "FOLLOW");
+    const modes = ["FOLLOW", "FREE", "DRIVER", "BIFOCAL"];
+    const currentIndex = modes.indexOf(cameraMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setCameraMode(modes[nextIndex]);
+  };
+
+  const getLabel = (mode) => {
+    switch (mode) {
+      case "FOLLOW": return "SEGUIMIENTO";
+      case "FREE": return "LIBRE";
+      case "DRIVER": return "FRONTAL";
+      case "BIFOCAL": return "BIFOCO";
+      default: return "SEGUIMIENTO";
+    }
   };
 
   return (
@@ -36,7 +49,7 @@ export function CameraToggle() {
         onMouseEnter={(e) => (e.target.style.background = "rgba(0, 0, 0, 0.8)")}
         onMouseLeave={(e) => (e.target.style.background = "rgba(0, 0, 0, 0.6)")}
       >
-        CAMARA: {cameraMode === "FOLLOW" ? "SEGUIMIENTO" : "LIBRE"}
+        CAMARA: {getLabel(cameraMode)}
       </button>
     </div>
   );

@@ -162,7 +162,7 @@ export function MapEditor() {
     let toolToApply = selectedTool;
     let metadata = {};
 
-    if (["tree", "streetlight", "flag"].includes(selectedTool)) toolToApply = selectedTool;
+    if (["tree", "streetlight", "flag", "person"].includes(selectedTool)) toolToApply = selectedTool;
     else if (selectedTool === "destination") {
       if (!isClick) return; // Solo clic simple
       const name = window.prompt("Nombre del destino:", `Destino ${Math.round(x)},${Math.round(z)}`);

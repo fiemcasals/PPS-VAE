@@ -3,6 +3,7 @@ import Joystick from "./Joystick";
 import Throttle from "./Throttle";
 import { Telemetry } from "./Telemetry";
 import { CameraToggle } from "./CameraToggle";
+import { ThresholdControl } from "./ThresholdControl";
 
 const HUD = () => {
   return (
@@ -13,6 +14,7 @@ const HUD = () => {
       <CameraToggle />
       <Joystick />
       <Throttle />
+      <ThresholdControl />
     </div>
   );
 };

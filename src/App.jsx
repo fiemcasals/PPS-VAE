@@ -7,6 +7,8 @@ import { PhysicsEngine } from "./components/Vehicle/Physics/PhysicsEngine";
 
 // --- NUEVOS IMPORTS PARA EL EDITOR ---
 import { EditorToolbar } from "./components/UI/EditorToolbar";
+import { WebcamFeed } from "./components/UI/WebcamFeed"; // Importar Webcam
+import { DetectionsHUD } from "./components/UI/DetectionsHUD"; // Importar HUD Detecciones
 import { MapVisualizer } from "./components/World/MapVisualizer";
 import { MapEditor } from "./components/World/MapEditor";
 import { AutonomousController } from "./components/Vehicle/AutonomousController";
@@ -16,6 +18,8 @@ function App() {
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       {/* CAPA 1: EL HUD Y EL EDITOR (Capa 2D HTML) */}
+      <WebcamFeed /> {/* Overlay de Cámara Física (BIFOCO) */}
+      <DetectionsHUD /> {/* Overlay de Cámara Virtual (FRONTAL) */}
       <HUD />
       <EditorToolbar />
 

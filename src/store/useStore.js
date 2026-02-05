@@ -15,6 +15,9 @@ export const useStore = create((set) => ({
   vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
   cameraMode: "FOLLOW",
   telemetry: { speed: 0, position: [0, 0, 0], acceleration: 0 },
+  detectionThresholds: { frontal: 0.15, bifocal: 0.5 },
+  setDetectionThreshold: (camera, value) =>
+    set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
 
   // --- SISTEMA DE MAPA Y EDICIÓN ---
   selectedTool: "none",

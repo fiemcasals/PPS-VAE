@@ -67,9 +67,9 @@ export function CameraController() {
     };
   }, []);
 
-  // Snap to car when switching to FREE mode
+  // Snap to car when switching to FREE or BIFOCAL mode
   useEffect(() => {
-    if (cameraMode === "FREE" || isEditing) {
+    if (cameraMode === "FREE" || cameraMode === "BIFOCAL" || isEditing) {
       const state = useStore.getState().vehicleState;
       if (state) {
         const carPos = new THREE.Vector3(state.x, 0, state.z);
@@ -111,8 +111,46 @@ export function CameraController() {
       camera.lookAt(currentLookAt.current);
     }
 
-    // Lógica de movimiento manual (WASD) y rotación (Flechas) para FREE/EDIT mode
-    if ((cameraMode === "FREE" || isEditing) && controlsRef.current) {
+    // Lógica para DRIVER (Frontal)
+    if (cameraMode === "DRIVER" && vehicleState) {
+      // Posición del conductor (aproximada dentro de la cabina)
+      // Ajustar offsets según el modelo del auto (e.g., +0.5m x, +1.5m y, +0.5m z relativo al centro rotado)
+      // Asumimos que heading es la rotación en Y.
+      const carPos = new THREE.Vector3(vehicleState.x, 1.6, vehicleState.z); // Altura de ojos aprox
+
+      // Offset hacia adelante (z) y un poco a la izquierda/derecha si se quiere
+      // Asumiendo +Z es "hacia adelante" en el modelo local del auto antes de rotar
+      // Pero en el mundo, heading define la dirección.
+      // Offset de 0.5 hacia adelante del centro del auto
+      const forwardOffset = 1.0;
+
+      const camX = carPos.x + Math.sin(vehicleState.heading) * forwardOffset;
+      const camZ = carPos.z + Math.cos(vehicleState.heading) * forwardOffset;
+
+      const targetPos = new THREE.Vector3(camX, 1.8, camZ);
+
+      // Mirar hacia adelante
+      const lookAtDist = 10.0;
+      const lookAtX = carPos.x + Math.sin(vehicleState.heading) * (forwardOffset + lookAtDist);
+      const lookAtZ = carPos.z + Math.cos(vehicleState.heading) * (forwardOffset + lookAtDist);
+
+      // Lerp más rápido para sentir la inercia del auto
+      // MAURI FIX: Eliminamos lerp para que la cámara quede FIJA y sin lag (Extrictamente solidaria al auto)
+      camera.position.copy(targetPos);
+      camera.lookAt(lookAtX, 1.8, lookAtZ);
+    }
+
+    // Lógica para BIFOCAL (Placeholder - Dejar libre por ahora)
+    if (cameraMode === "BIFOCAL") {
+      // Por ahora no hace nada específico, permitimos que se quede donde estaba o que sea controlable si decidimos
+      // El usuario pidió "dejalo libre", así que podríamos dejarlo como FREE o estático.
+      // Si queremos que sea "libre" de control like FREE, necesitamos habilitar OrbitControls.
+      // Pero si es para conectar una cámara real, quizás solo dejamos la cámara quieta.
+      // Vamos a tratarlo como FREE MODE en cuanto a controles por ahora para no bloquear.
+    }
+
+    // Lógica de movimiento manual (WASD) y rotación (Flechas) para FREE/EDIT/BIFOCAL mode
+    if ((cameraMode === "FREE" || cameraMode === "BIFOCAL" || isEditing) && controlsRef.current) {
       const speed = 40 * delta; // Velocidad de movimiento
       const rotateSpeed = 2.0 * delta; // Velocidad de rotación
 
@@ -176,7 +214,7 @@ export function CameraController() {
 
   return (
     <>
-      {(cameraMode === "FREE" || isEditing) && (
+      {(cameraMode === "FREE" || cameraMode === "BIFOCAL" || isEditing) && (
         <OrbitControls
           ref={controlsRef}
           makeDefault

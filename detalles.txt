@@ -1,0 +1,4 @@
+1. revisar porque si toco primero el acelerador y desp el joystick, el joystick queda pegado a la derecha, al reves no pasa
+2. poner las configuraciones de todas las variables junto a un reedme con una interfaz grafica
+3. aplicar un algoritmo tipo dijkstra entre los nodos
+
