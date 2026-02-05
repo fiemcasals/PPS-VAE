@@ -19,6 +19,37 @@ export const useStore = create((set) => ({
   setDetectionThreshold: (camera, value) =>
     set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
 
+  // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
+  config: { arrival_threshold: 3.0, maneuver_threshold: 0.5 }, // Valores por defecto
+
+  fetchConfig: async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/config/");
+      if (response.ok) {
+        const data = await response.json();
+        set({ config: data });
+        console.log("Config loaded from Backend:", data);
+      }
+    } catch (e) {
+      console.warn("Backend not available, using defaults.", e);
+    }
+  },
+
+  saveConfig: async (newConfig) => {
+    // Actualización optimista
+    set((state) => ({ config: { ...state.config, ...newConfig } }));
+    try {
+      await fetch("http://localhost:8000/api/config/update/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newConfig),
+      });
+      console.log("Config saved to Backend.");
+    } catch (e) {
+      console.error("Failed to save config:", e);
+    }
+  },
+
   // --- SISTEMA DE MAPA Y EDICIÓN ---
   selectedTool: "none",
   gridData: {},

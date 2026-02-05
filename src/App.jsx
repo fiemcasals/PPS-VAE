@@ -14,7 +14,16 @@ import { MapEditor } from "./components/World/MapEditor";
 import { AutonomousController } from "./components/Vehicle/AutonomousController";
 import { PathRecorder } from "./components/Vehicle/PathRecorder";
 
+import { useEffect } from "react";
+import { useStore } from "./store/useStore";
+
 function App() {
+  const fetchConfig = useStore((state) => state.fetchConfig);
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
+
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       {/* CAPA 1: EL HUD Y EL EDITOR (Capa 2D HTML) */}

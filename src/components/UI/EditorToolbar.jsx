@@ -10,6 +10,7 @@ export function EditorToolbar() {
   const [showScenarios, setShowScenarios] = useState(false);
   const [showPaths, setShowPaths] = useState(false); // Estado para PathManager
   const [showDestinations, setShowDestinations] = useState(false);
+  const [showSettings, setShowSettings] = useState(false); // MAURI: Estado para menú de configuración
   const [isCalculating, setIsCalculating] = useState(false);
   // ... (omitting lines for brevity in prompt, but in tool call I must be precise or use multiple chunks)
   // I will use multi_replace to be safe and cleaner.
@@ -33,6 +34,8 @@ export function EditorToolbar() {
   const savedPaths = useStore((state) => state.savedPaths);
   const loadRecordedPath = useStore((state) => state.loadRecordedPath);
   const deleteRecordedPath = useStore((state) => state.deleteRecordedPath);
+  const saveCurrentPath = useStore((state) => state.saveCurrentPath); // Added for save button
+  const currentPath = useStore((state) => state.currentPath); // Added for save button visibility
 
   // Submenú de construcciones
   const [showConstruction, setShowConstruction] = useState(false);
@@ -275,7 +278,11 @@ export function EditorToolbar() {
               {isRecording ? "⏹️ DETENER GRABACIÓN" : "⏺️ GRABAR RECORRIDO"}
             </button>
 
-            {!isRecording && (
+            {/* MAURI: Allow tool usage even if recording, except maybe Stop Car which conflicts with simple recording?
+                Actually, the user wants to use "Destinations" while recording.
+                So we remove the !isRecording check for the buttons, or specific ones.
+             */}
+            {(true) && ( // Removed !isRecording block restriction
               <>
                 {/* HERRAMIENTAS BÁSICAS */}
                 <button
@@ -343,10 +350,36 @@ export function EditorToolbar() {
             <button onClick={() => { setShowScenarios(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
               💾 Escenarios
             </button>
-            <button onClick={() => { setShowPaths(true); setOpen(false); }} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left" }}>
-              📀 Rutas
+            {/* Rutas was removed from here */}
+
+            <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+
+            {/* GEAR ICON FOR SETTINGS (TOGGLE) */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSettings(!showSettings);
+              }}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                cursor: "pointer",
+                background: showSettings ? "#f0f0f0" : "white",
+                textAlign: "left",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderLeft: showSettings ? "4px solid #666" : "none"
+              }}>
+              <span>⚙️ Configuración</span>
+              <span>{showSettings ? "▼" : "▶"}</span>
             </button>
           </div>
+
+          {/* SUBMENÚ LATERAL DE CONFIGURACIÓN */}
+          {showSettings && !isRecording && (
+            <SettingsPanel onClose={() => setShowSettings(false)} />
+          )}
 
           {/* SUBMENÚ LATERAL DE CONSTRUCCIONES */}
           {showConstruction && !isRecording && (
@@ -398,12 +431,35 @@ export function EditorToolbar() {
           )}
 
           {/* SUBMENÚ LATERAL DE DESTINOS */}
-          {showDestinations && !isRecording && (
+          {showDestinations && ( // Allow viewing even if recording
             <div style={{
               background: "white", borderRadius: "8px", padding: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
               minWidth: "200px", maxHeight: "400px", overflowY: "auto", border: "1px solid #ddd"
             }}>
               <h4 style={{ margin: "0 0 10px 0", fontSize: "0.9em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>📍 Seleccionar Destino</h4>
+
+              {/* BOTÓN PARA GUARDAR RUTA ACTUAL (SI HAY UNA) */}
+              {currentPath && currentPath.length > 0 && (
+                <div style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "1px dashed #ccc" }}>
+                  <p style={{ fontSize: "0.8em", margin: "0 0 5px 0", color: "#666" }}>Ruta Actual ({currentPath.length} ptos)</p>
+                  <button
+                    onClick={() => {
+                      const name = prompt("Nombre para la ruta actual:", "Ruta Calculada");
+                      if (name) {
+                        saveCurrentPath(name);
+                        alert("Ruta guardada exitosamente.");
+                      }
+                    }}
+                    style={{
+                      width: "100%", padding: "8px", background: "#4caf50", color: "white",
+                      border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "0.85em"
+                    }}
+                  >
+                    💾 Guardar Ruta Actual
+                  </button>
+                </div>
+              )}
+
               {destinations.length === 0 && <p style={{ fontSize: "0.8em", color: "#999" }}>No hay destinos creados.</p>}
               {destinations.map(([key, val]) => (
                 <button
@@ -418,11 +474,57 @@ export function EditorToolbar() {
                   {val.name || "Destino sin nombre"}
                 </button>
               ))}
+
+              {/* SECCIÓN RUTAS GUARDADAS */}
+              <div style={{ borderTop: "1px solid #eee", margin: "10px 0 5px 0", paddingTop: "5px" }}></div>
+              <h4 style={{ margin: "0 0 10px 0", fontSize: "0.9em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>📀 Rutas Guardadas</h4>
+
+              {Object.keys(savedPaths).length === 0 && (
+                <p style={{ fontSize: "0.8em", color: "#999", fontStyle: "italic" }}>No hay rutas.</p>
+              )}
+
+              {Object.keys(savedPaths).map((name) => (
+                <div key={name} style={{ display: "flex", gap: "2px", marginBottom: "5px" }}>
+                  <button
+                    onClick={() => {
+                      useStore.getState().loadRecordedPath(name);
+                      // Opcional: Cerrar menú si se desea
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      border: "1px solid #eee",
+                      borderRadius: "5px",
+                      background: "#e8f5e9",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontSize: "0.9em",
+                      color: "#2e7d32",
+                      fontWeight: "bold",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis"
+                    }}
+                    title={`Cargar ruta: ${name}`}
+                  >
+                    {name}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`¿Borrar "${name}"?`)) useStore.getState().deleteRecordedPath(name);
+                    }}
+                    style={{ border: "none", background: "#ffebee", color: "red", cursor: "pointer", borderRadius: "5px", padding: "0 8px" }}
+                    title="Borrar"
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
           {/* SUBMENÚ LATERAL DE ITINERARIOS */}
-          {showItineraries && !isRecording && (
+          {showItineraries && ( // Allow viewing even if recording
             <div style={{
               background: "white", borderRadius: "8px", padding: "10px", boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
               minWidth: "220px", maxHeight: "500px", overflowY: "auto", border: "1px solid #ddd"
@@ -513,5 +615,81 @@ export function EditorToolbar() {
         }
       `}</style>
     </div >
+  );
+}
+
+// Componente interno para manejar el formulario de configuración
+function SettingsPanel({ onClose }) {
+  const config = useStore((state) => state.config);
+  const saveConfig = useStore((state) => state.saveConfig);
+  const [localConfig, setLocalConfig] = React.useState(config);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setLocalConfig(prev => ({ ...prev, [name]: parseFloat(value) }));
+  };
+
+  const handleSave = () => {
+    saveConfig(localConfig);
+    alert("Configuración guardada en Backend.");
+  };
+
+  return (
+    <div style={{
+      background: "white",
+      borderRadius: "8px",
+      padding: "15px",
+      boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+      minWidth: "250px",
+      border: "1px solid #ddd",
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px"
+    }}>
+      <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>⚙️ Configuración Auto</h4>
+
+      <div>
+        <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
+        <input
+          type="number"
+          step="0.1"
+          name="arrival_threshold"
+          value={localConfig.arrival_threshold}
+          onChange={handleChange}
+          style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }}
+        />
+        <small style={{ color: "#888", fontSize: "0.75em" }}>Distancia para considerar meta alcanzada.</small>
+      </div>
+
+      <div>
+        <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
+        <input
+          type="number"
+          step="0.1"
+          name="maneuver_threshold"
+          value={localConfig.maneuver_threshold}
+          onChange={handleChange}
+          style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }}
+        />
+        <small style={{ color: "#888", fontSize: "0.75em" }}>Precisión requerida en cambios de marcha.</small>
+      </div>
+
+      <div style={{ display: "flex", gap: "5px", marginTop: "10px" }}>
+        <button
+          onClick={handleSave}
+          style={{ flex: 1, padding: "8px", background: "#007bff", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
+        >
+          💾 Guardar
+        </button>
+        {/* Opción para ir al Login Page del Backend si se desea */}
+        <button
+          onClick={() => window.open("http://localhost:8000/login/", "_blank")}
+          style={{ padding: "8px", background: "#333", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
+          title="Ir al Login"
+        >
+          🔑
+        </button>
+      </div>
+    </div>
   );
 }

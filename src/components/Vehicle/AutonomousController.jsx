@@ -88,19 +88,48 @@ export function AutonomousController() {
     // Si no está en modo autónomo o no hay ruta, no hacemos nada
     if (!isAutonomous || !currentPath || currentPath.length === 0) return;
 
-    // --- ACTUALIZACIÓN DE ÍNDICE (Seguimiento Secuencial) ---
+    // --- ACTUALIZACIÓN DE ÍNDICE (Seguimiento Robusto) ---
+    // MAURI: Scan Forward logic para evitar quedarse pegado en puntos viejos si cortamos camino
     let bestIndex = currentIndex.current;
+
+    // Ventana de escaneo: Miramos 50 puntos hacia adelante (aprox 25-50 metros)
+    const SCAN_WINDOW = 50;
+    let closestDist = Infinity;
+    let newBestIndex = bestIndex;
+
+    const maxScan = Math.min(currentPath.length, bestIndex + SCAN_WINDOW);
+
+    // Buscamos el punto más cercano en la ventana futura
+    for (let i = bestIndex; i < maxScan; i++) {
+      const p = currentPath[i];
+      const dist = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
+      if (dist < closestDist) {
+        closestDist = dist;
+        newBestIndex = i;
+      }
+    }
+
+    // Si encontramos un punto más adelantado que está razonablemente cerca (< 15m), saltamos a él.
+    // Esto repara el caso donde "cortamos curva" y el punto anterior quedó lejos pero nunca tocamos el radio de llegada.
+    if (newBestIndex > bestIndex && closestDist < 15.0) {
+      bestIndex = newBestIndex;
+    }
+
     let node = currentPath[bestIndex];
     // Calculamos la distancia horizontal (hipotenusa) entre el auto y el nodo actual
     const d = Math.hypot(node.x - vehicleState.x, node.z - vehicleState.z);
 
-    // CONDICIONAL DE AVANCE:
+    // CONDICIONAL DE AVANCE FINO:
+    // Si ya estamos en el punto óptimo (closest point), chequeamos si estamos TAN cerca que conviene pasar al siguiente
+    // para mantener fluidez.
     let nextNode = currentPath[bestIndex + 1];
-    let arrivalThreshold = 2.0; // Distancia por defecto para considerar "llegamos al nodo"
+    // MAURI: LEER CONFIGURACIÓN DEL STORE (BACKEND)
+    const { config } = useStore.getState();
+    let arrivalThreshold = config.arrival_threshold; // Default 3.0 or user value
 
-    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos (0.5m)
+    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos
     if (nextNode && nextNode.direction !== node.direction) {
-      arrivalThreshold = 0.5; // MAURI: Aumentamos tolerancia (antes 0.1) para asegurar detección
+      arrivalThreshold = config.maneuver_threshold; // Default 0.5
     }
 
     // Si estamos lo suficientemente cerca, pasamos al siguiente punto de la lista
