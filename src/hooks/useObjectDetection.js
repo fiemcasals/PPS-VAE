@@ -12,13 +12,19 @@ export function useObjectDetection(sourceRef, isActive = true, threshold = 0.5) 
     useEffect(() => {
         async function loadModel() {
             try {
-                console.log("Cargando modelo COCO-SSD...");
-                const loadedModel = await cocoSsd.load({ base: "lite_mobilenet_v2" }); // Usamos versión ligera
+                console.log("Cargando modelo COCO-SSD (Local)...");
+                // MAURI: Cargamos desde la carpeta local public/models
+                // Esto requiere que hayas ejecutado "download_model.sh" previamente.
+                const loadedModel = await cocoSsd.load({
+                    base: "lite_mobilenet_v2",
+                    modelUrl: "/models/lite_mobilenet_v2/model.json"
+                });
                 setModel(loadedModel);
                 setIsLoading(false);
                 console.log("Modelo cargado.");
             } catch (err) {
-                console.error("Error cargando modelo:", err);
+                console.warn("[ObjectDetection] No se pudo cargar el modelo (¿Sin Internet?). Modo Offline activado.");
+                // console.error("Error cargando modelo:", err); // Suppress stack trace
                 setIsLoading(false);
             }
         }

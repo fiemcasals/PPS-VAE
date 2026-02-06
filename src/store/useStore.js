@@ -19,6 +19,15 @@ export const useStore = create((set) => ({
   setDetectionThreshold: (camera, value) =>
     set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
 
+  // --- ESTADO DE NAVEGACIÓN ---
+  currentPath: null,
+  isAutonomous: false,
+  vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
+  targetDestination: null,
+  explored: [], // Nodos explorados por A*
+  navGraph: null, // Grafo Topológico
+  setNavGraph: (graph) => set({ navGraph: graph }),
+
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
   config: {
     arrival_threshold: 3.0,

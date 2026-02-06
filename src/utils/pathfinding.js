@@ -4,7 +4,7 @@ const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno s
 // MAURI: "Conservative Planning": Limitamos el "cerebro" al 40% del volante (0.32 rad).
 // El auto FÍSICAMENTE puede girar 0.8, pero el PLAN nunca pedirá más de 0.32.
 // Esto fuerza curvas mucho más amplias (radios grandes) que el límite físico.
-const STEER_STEPS = [-0.4, -0.3, -0.2, -0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4];
+const STEER_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
 // MAURI: Factor de peso BASE para la Heurística (h).
@@ -93,21 +93,45 @@ class PriorityQueue {
   }
 }
 
-const heuristic = (pos, goal) => Math.hypot(pos.x - goal.x, pos.z - goal.z);
+// MAURI: Helper para distancia Punto-Segmento (Corredor Topológico)
+const distanceToSegment = (p, v, w) => {
+  const l2 = (v.x - w.x) ** 2 + (v.z - w.z) ** 2;
+  if (l2 === 0) return Math.hypot(p.x - v.x, p.z - v.z);
+  let t = ((p.x - v.x) * (w.x - v.x) + (p.z - v.z) * (w.z - v.z)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(
+    p.x - (v.x + t * (w.x - v.x)),
+    p.z - (v.z + t * (w.z - v.z))
+  );
+};
+
+// Heurística Aumentada: Euclidean + Corredor Topológico
+const heuristic = (pos, goal, macroPath) => {
+  const h_euclidean = Math.hypot(pos.x - goal.x, pos.z - goal.z);
+
+  if (!macroPath || macroPath.length < 2) return h_euclidean;
+
+  // Calculamos distancia al "corredor" (la línea poliédrica de la macro-ruta)
+  let minDistToCorridor = Infinity;
+  for (let i = 0; i < macroPath.length - 1; i++) {
+    const d = distanceToSegment(pos, macroPath[i], macroPath[i + 1]);
+    if (d < minDistToCorridor) minDistToCorridor = d;
+  }
+
+  // Penalización: Si te alejas del corredor, aumenta el costo.
+  // Factor 2.5: Fuerte atracción hacia la carretera principal.
+  return h_euclidean + minDistToCorridor * 2.5;
+};
 
 // MAURI: Función Principal del Buscador de Caminos (A*)
-// Convertido a ASYNC para permitir que la interfaz gráfica (React) se actualice mientras calculamos.
-// Si fuera síncrono, el navegador se congelaría totalmente durante cálculos largos.
-// MAURI: Función Principal del Buscador de Caminos (A*)
-// Convertido a ASYNC para permitir que la interfaz gráfica (React) se actualice mientras calculamos.
-// Si fuera síncrono, el navegador se congelaría totalmente durante cálculos largos.
 export async function findPathAsync(
   start,
   goal,
   gridData,
   cellSize,
-  config = {}, // MAURI: Added config object
+  config = {},
   onProgress,
+  macroPath = null // MAURI: Nuevo argumento
 ) {
   // MAURI: Límite alto, pero con yield no congela la UI
   const DEBUG_ITER_LIMIT = 50000;
@@ -117,8 +141,9 @@ export async function findPathAsync(
   const STEERING_COST = config.steering_cost || 20.0;
   const GEAR_SWITCH_COST = config.gear_switch_cost || 150.0;
 
+  // H Inicial con MacroPath
   const openSet = [
-    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal)),
+    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal, macroPath)),
   ];
   const closedSet = new Map();
   const explored = [];
@@ -166,8 +191,6 @@ export async function findPathAsync(
     const nextMoves = [];
 
     // 1. Lógica de Avance (d: 1)
-    // --- OPCIONES PARA IR HACIA ADELANTE (d: 1) ---
-    // --- OPCIONES PARA IR HACIA ADELANTE (d: 1) ---
     if (curr.direction === -1) {
       // CAMBIO DE MARCHA: Si venía de atrás, para ir adelante...
       nextMoves.push({ d: 1, s: 0 }); // Opción 1: Salir recto
@@ -208,15 +231,10 @@ export async function findPathAsync(
         continue;
 
       // MAURI: "Tunnel Vision Config"
-      // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
-      // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
       let moveCost =
         (d === 1 ? STEP_SIZE : STEP_SIZE * BACKWARD_WEIGHT) + Math.abs(s) * STEERING_COST;
 
       // MAURI: Parking Penalty
-      // Si la celda destino es un "parking", multiplicamos el costo por 5.
-      // Esto hace que el auto prefiera la calle (road) aunque sea más largo,
-      // y solo entre al parking si es el destino final o no hay otra opción.
       const cx = Math.floor(nextX / cellSize) * cellSize + cellSize / 2;
       const cz = Math.floor(nextZ / cellSize) * cellSize + cellSize / 2;
       const nextCell = gridData[`${cx},${cz}`];
@@ -227,13 +245,9 @@ export async function findPathAsync(
       const nextG = curr.g + moveCost;
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
-      // Subimos a 150 para que le duela un poco más hacer cambios innecesarios.
       const dirChangeCost = curr.direction !== d ? GEAR_SWITCH_COST : 0;
 
       // MAURI: PESO DINÁMICO PROGRESIVO
-      // Cuantos más nodos exploramos, más "desesperado" (Greedy) se vuelve el algoritmo.
-      // iter > 1000: Empieza a subir.
-      // slope: (iter - 1000) / 5000: Cada 5000 iters extra, suma 1.0 al peso.
       let dynamicWeight = BASE_HEURISTIC_WEIGHT;
       if (iter > 1000) {
         dynamicWeight += (iter - 1000) / 2000;
@@ -245,11 +259,11 @@ export async function findPathAsync(
           nextZ,
           nextTheta,
           nextG + dirChangeCost,
-          heuristic({ x: nextX, z: nextZ }, goal),
+          heuristic({ x: nextX, z: nextZ }, goal, macroPath), // <--- Pasamos MacroPath
           curr,
           s,
           d,
-          dynamicWeight // <--- Pasamos el peso dinámico
+          dynamicWeight
         ),
       );
     }
