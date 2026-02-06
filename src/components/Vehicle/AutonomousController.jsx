@@ -284,8 +284,8 @@ export function AutonomousController() {
     const userKp = config.steering_kp || 2.5;
 
     // Usamos el Kp configurado (negativo)
-    // En reversa mantenemos el mismo Kp o incluso menor para evitar latigazos.
-    const Kp = effectiveDir === -1 ? -userKp : -userKp;
+    // Si es reversa, le damos un 20% extra de "picante" porque es más inestable
+    const Kp = effectiveDir === -1 ? -(userKp * 1.2) : -userKp;
 
     const maxSteer = 0.8; // Límite físico del volante
     let newSteer = angleError * Kp;
