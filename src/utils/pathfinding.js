@@ -4,7 +4,7 @@ const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno s
 // MAURI: "Conservative Planning": Limitamos el "cerebro" al 40% del volante (0.32 rad).
 // El auto FÍSICAMENTE puede girar 0.8, pero el PLAN nunca pedirá más de 0.32.
 // Esto fuerza curvas mucho más amplias (radios grandes) que el límite físico.
-const STEER_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
+const STEER_STEPS = [-0.4, -0.3, -0.2, -0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4];
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
 // MAURI: Factor de peso BASE para la Heurística (h).
@@ -98,15 +98,24 @@ const heuristic = (pos, goal) => Math.hypot(pos.x - goal.x, pos.z - goal.z);
 // MAURI: Función Principal del Buscador de Caminos (A*)
 // Convertido a ASYNC para permitir que la interfaz gráfica (React) se actualice mientras calculamos.
 // Si fuera síncrono, el navegador se congelaría totalmente durante cálculos largos.
+// MAURI: Función Principal del Buscador de Caminos (A*)
+// Convertido a ASYNC para permitir que la interfaz gráfica (React) se actualice mientras calculamos.
+// Si fuera síncrono, el navegador se congelaría totalmente durante cálculos largos.
 export async function findPathAsync(
   start,
   goal,
   gridData,
   cellSize,
+  config = {}, // MAURI: Added config object
   onProgress,
 ) {
   // MAURI: Límite alto, pero con yield no congela la UI
   const DEBUG_ITER_LIMIT = 50000;
+
+  // Extracción de pesos configurables con defaults
+  const BACKWARD_WEIGHT = config.backward_weight || 30.0;
+  const STEERING_COST = config.steering_cost || 20.0;
+  const GEAR_SWITCH_COST = config.gear_switch_cost || 150.0;
 
   const openSet = [
     new Node(start.x, start.z, start.heading, 0, heuristic(start, goal)),
@@ -202,7 +211,7 @@ export async function findPathAsync(
       // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
       // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
       let moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * 30.0) + Math.abs(s) * 20;
+        (d === 1 ? STEP_SIZE : STEP_SIZE * BACKWARD_WEIGHT) + Math.abs(s) * STEERING_COST;
 
       // MAURI: Parking Penalty
       // Si la celda destino es un "parking", multiplicamos el costo por 5.
@@ -219,7 +228,7 @@ export async function findPathAsync(
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
       // Subimos a 150 para que le duela un poco más hacer cambios innecesarios.
-      const dirChangeCost = curr.direction !== d ? 150.0 : 0;
+      const dirChangeCost = curr.direction !== d ? GEAR_SWITCH_COST : 0;
 
       // MAURI: PESO DINÁMICO PROGRESIVO
       // Cuantos más nodos exploramos, más "desesperado" (Greedy) se vuelve el algoritmo.

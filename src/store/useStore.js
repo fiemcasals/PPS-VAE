@@ -20,7 +20,17 @@ export const useStore = create((set) => ({
     set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
 
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
-  config: { arrival_threshold: 3.0, maneuver_threshold: 0.5 }, // Valores por defecto
+  config: {
+    arrival_threshold: 3.0,
+    maneuver_threshold: 1,
+    curve_threshold: 1.5,
+    lookahead_distance: 2.0,
+    backward_weight: 30.0,
+    steering_cost: 20.0,
+    gear_switch_cost: 50.0,
+    steering_kp: 5.0,
+    base_speed: 0.4
+  }, // Valores por defecto
 
   fetchConfig: async () => {
     try {

@@ -17,7 +17,7 @@ export function useVehiclePhysics() {
         const { throttle, steering, direction } = controls;
         const state = physicsState.current;
 
-        // 1. Aceleración / Frenado
+        // 1. Aceleración / Frenado CORRECTO (Simétrico)
         let targetSpeed = 0;
         if (throttle > 0) {
             targetSpeed =
@@ -26,12 +26,47 @@ export function useVehiclePhysics() {
                     : -VEHICLE_CONFIG.MAX_REVERSE_SPEED * throttle;
         }
 
-        // Interpolación lineal simple para la velocidad (Aceleración)
+        // Detectar si estamos Acelerando (alejándonos de 0) o Frenando (acercándonos a 0)
+        // Nota: Si targetSpeed y speed tienen signos opuestos, es Frenado primero.
+
+        const isAccelerating = Math.abs(targetSpeed) > Math.abs(state.speed) && Math.sign(targetSpeed) === Math.sign(state.speed);
+
+        // Aplicar cambio
         if (state.speed < targetSpeed) {
-            state.speed += VEHICLE_CONFIG.ACCELERATION * delta * throttle;
+            // Queremos aumentar el valor (ej -5 -> 0, o 0 -> 5)
+            // Si speed es negativo (-5 -> 0), es FRENADO DE REVERSA.
+            // Si speed es positivo (0 -> 5), es ACELERACION NORMAL.
+
+            // Logica anterior: state.speed += ACCEL * throttle.
+            // Bug anterior: En reverse stop (-5 -> 0), usaba ACCEL (lento). Queremos BRAKING (rápido).
+
+            let rate = VEHICLE_CONFIG.ACCELERATION * throttle; // Default Accel
+            if (state.speed < 0 && targetSpeed >= state.speed) {
+                // Estamos subiendo desde negativo (Frenando reversa o acelerando hacia adelante desde reversa)
+                // Si target es 0 (frenar), usar BRAKING.
+                // Si target es > 0, usar BRAKING hasta 0 luego ACCEL.
+                // Simplificación: Si vamos en contra del movimiento, es BRAKE.
+                rate = VEHICLE_CONFIG.BRAKING; // Frenado fuerte
+            }
+
+            state.speed += rate * delta;
             if (state.speed > targetSpeed) state.speed = targetSpeed;
+
         } else if (state.speed > targetSpeed) {
-            state.speed -= VEHICLE_CONFIG.BRAKING * delta; // Frenado o desaceleración
+            // Queremos bajar el valor (ej 5 -> 0, o 0 -> -5)
+            // Si speed es positivo (5 -> 0), es FRENADO NORMAL.
+            // Si speed es negativo (0 -> -5), es ACELERACION REVERSA.
+
+            // Logica anterior: state.speed -= BRAKING.
+            // Bug anterior: En reverse accel (0 -> -5), usaba BRAKING (muy rápido/brusco). Queremos ACCEL.
+
+            let rate = VEHICLE_CONFIG.BRAKING; // Default Brake (para 5 -> 0)
+            if (state.speed <= 0 && targetSpeed < state.speed) {
+                // Estamos bajando en negativo (Acelerando marcha atrás)
+                rate = VEHICLE_CONFIG.ACCELERATION * throttle;
+            }
+
+            state.speed -= rate * delta;
             if (state.speed < targetSpeed) state.speed = targetSpeed;
         }
 

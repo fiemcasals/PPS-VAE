@@ -44,6 +44,30 @@ export function EditorToolbar() {
   const [showItineraries, setShowItineraries] = useState(false);
   const [itinerary, setItinerary] = useState([]); // Array of keys
 
+  // MAURI: Helper to ensure exclusive submenu opening
+  const toggleSubmenu = (menuName) => {
+    // Close all first, but if we are clicking the one already open, toggle it (close it)
+    // Actually simpler: if active, close. If inactive, open and close others.
+
+    // States to manage: Construction, Destinations, Itineraries, Settings
+    const states = {
+      construction: [showConstruction, setShowConstruction],
+      destinations: [showDestinations, setShowDestinations],
+      itineraries: [showItineraries, setShowItineraries],
+      settings: [showSettings, setShowSettings]
+    };
+
+    const [currentVal, setLimit] = states[menuName];
+
+    // If opening, close others
+    if (!currentVal) {
+      Object.keys(states).forEach(key => {
+        if (key !== menuName) states[key][1](false);
+      });
+    }
+    setLimit(!currentVal);
+  };
+
   // Tools definitions
   const constructionTools = [
     { id: "road", label: "🛣️ Camino (Arrastrar)", color: "#333" },
@@ -79,6 +103,7 @@ export function EditorToolbar() {
         { x: destX, z: destZ },
         gridData,
         GRID_SIZE,
+        useStore.getState().config, // MAURI: Pass config
         (exploredNodes) => setExplored(exploredNodes)
       );
 
@@ -128,6 +153,7 @@ export function EditorToolbar() {
           { x: destX, z: destZ },
           gridData,
           GRID_SIZE,
+          useStore.getState().config, // MAURI: Pass config
           // Solo mostramos explorados del tramo actual para no saturar, o podríamos acumular
           (exploredNodes) => setExplored(exploredNodes)
         );
@@ -308,7 +334,7 @@ export function EditorToolbar() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setShowConstruction(!showConstruction);
+                    toggleSubmenu("construction");
                   }}
                   style={{
                     padding: "10px 20px",
@@ -336,12 +362,12 @@ export function EditorToolbar() {
               🧪 Test Random
             </button>
 
-            <button onClick={() => setShowDestinations(!showDestinations)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showDestinations ? "#e6f7ff" : "white", textAlign: "left", fontWeight: "bold", color: "#007bff", display: "flex", justifyContent: "space-between", borderLeft: showDestinations ? "3px solid #007bff" : "none" }}>
+            <button onClick={() => toggleSubmenu("destinations")} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showDestinations ? "#e6f7ff" : "white", textAlign: "left", fontWeight: "bold", color: "#007bff", display: "flex", justifyContent: "space-between", borderLeft: showDestinations ? "3px solid #007bff" : "none" }}>
               <span>📍 Destinos</span>
               <span>{showDestinations ? "▶" : "▶"}</span>
             </button>
 
-            <button onClick={() => setShowItineraries(!showItineraries)} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showItineraries ? "#f3e5f5" : "white", textAlign: "left", fontWeight: "bold", color: "#9c27b0", display: "flex", justifyContent: "space-between", borderLeft: showItineraries ? "3px solid #9c27b0" : "none" }}>
+            <button onClick={() => toggleSubmenu("itineraries")} style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: showItineraries ? "#f3e5f5" : "white", textAlign: "left", fontWeight: "bold", color: "#9c27b0", display: "flex", justifyContent: "space-between", borderLeft: showItineraries ? "3px solid #9c27b0" : "none" }}>
               <span>🗺️ Itinerarios</span>
               <span>{showItineraries ? "▶" : "▶"}</span>
             </button>
@@ -358,7 +384,7 @@ export function EditorToolbar() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setShowSettings(!showSettings);
+                toggleSubmenu("settings");
               }}
               style={{
                 padding: "10px 20px",
@@ -486,9 +512,57 @@ export function EditorToolbar() {
               {Object.keys(savedPaths).map((name) => (
                 <div key={name} style={{ display: "flex", gap: "2px", marginBottom: "5px" }}>
                   <button
-                    onClick={() => {
-                      useStore.getState().loadRecordedPath(name);
-                      // Opcional: Cerrar menú si se desea
+                    onClick={async () => {
+                      // MAURI: Smart Route Loading (Approach + Execute)
+                      // 1. Obtener ruta guardada (raw, sin transformar)
+                      const savedPath = savedPaths[name];
+                      if (!savedPath || savedPath.length === 0) return;
+
+                      setIsCalculating(true);
+                      setExplored([]);
+                      setPath([]);
+
+                      try {
+                        // 2. Calcular Approach (Desde donde estoy hasta el inicio de la ruta grabada)
+                        const { vehicleState } = useStore.getState();
+                        const startPoint = savedPath[0];
+
+                        const result = await findPathAsync(
+                          { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
+                          { x: startPoint.x, z: startPoint.z }, // Ir al inicio de la grabación
+                          gridData,
+                          GRID_SIZE,
+                          useStore.getState().config, // MAURI: Pass config
+                          (exploredNodes) => setExplored(exploredNodes)
+                        );
+
+                        if (result.path) {
+                          // 3. Fusionar Approach + Recorded Path
+                          // El approach nos deja en startPoint. Luego concatenamos la grabación.
+                          // Evitamos duplicar el punto de unión si está muy cerca.
+                          const combinedPath = [...result.path];
+
+                          const lastApproach = result.path[result.path.length - 1];
+                          if (Math.hypot(lastApproach.x - startPoint.x, lastApproach.z - startPoint.z) < 0.1) {
+                            combinedPath.push(...savedPath.slice(1));
+                          } else {
+                            combinedPath.push(...savedPath);
+                          }
+
+                          setPath(combinedPath);
+                          setExplored(result.explored);
+                          setTargetDestination({ name: `Ruta: ${name} (Con Aproximación)` });
+                          setAutonomous(true);
+                          setShowDestinations(false);
+                        } else {
+                          alert("No se pudo calcular una ruta de aproximación al inicio de la grabación.");
+                        }
+                      } catch (e) {
+                        console.error(e);
+                        alert("Error calculando aproximación.");
+                      } finally {
+                        setIsCalculating(false);
+                      }
                     }}
                     style={{
                       flex: 1,
@@ -624,6 +698,11 @@ function SettingsPanel({ onClose }) {
   const saveConfig = useStore((state) => state.saveConfig);
   const [localConfig, setLocalConfig] = React.useState(config);
 
+  // MAURI: Sync local state when store config changes (e.g. after fetchConfig)
+  React.useEffect(() => {
+    setLocalConfig(config);
+  }, [config]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setLocalConfig(prev => ({ ...prev, [name]: parseFloat(value) }));
@@ -633,6 +712,35 @@ function SettingsPanel({ onClose }) {
     saveConfig(localConfig);
     alert("Configuración guardada en Backend.");
   };
+
+  // Accordion state: 'objectives' | 'planner' | 'pilot'
+  const [activeGroup, setActiveGroup] = useState("objectives");
+
+  const toggleGroup = (group) => {
+    setActiveGroup(activeGroup === group ? null : group);
+  };
+
+  const GroupHeader = ({ id, label, icon }) => (
+    <div
+      onClick={() => toggleGroup(id)}
+      style={{
+        margin: "5px 0",
+        borderBottom: "1px solid #eee",
+        fontSize: "0.85em",
+        color: activeGroup === id ? "#007bff" : "#555",
+        fontWeight: activeGroup === id ? "bold" : "normal",
+        cursor: "pointer",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "5px 2px",
+        background: activeGroup === id ? "#f8f9fa" : "transparent"
+      }}
+    >
+      <span>{icon} {label}</span>
+      <span>{activeGroup === id ? "▼" : "▶"}</span>
+    </div>
+  );
 
   return (
     <div style={{
@@ -648,31 +756,62 @@ function SettingsPanel({ onClose }) {
     }}>
       <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>⚙️ Configuración Auto</h4>
 
-      <div>
-        <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
-        <input
-          type="number"
-          step="0.1"
-          name="arrival_threshold"
-          value={localConfig.arrival_threshold}
-          onChange={handleChange}
-          style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }}
-        />
-        <small style={{ color: "#888", fontSize: "0.75em" }}>Distancia para considerar meta alcanzada.</small>
-      </div>
+      {/* GRUPO 1: GENERAL */}
+      <GroupHeader id="objectives" label="Objetivos" icon="🎯" />
+      {activeGroup === "objectives" && (
+        <div style={{ paddingLeft: "5px" }}>
+          <div>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
+            <input type="number" step="0.1" name="arrival_threshold" value={localConfig.arrival_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
+            <input type="number" step="0.1" name="maneuver_threshold" value={localConfig.maneuver_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Curva:</label>
+            <input type="number" step="0.1" name="curve_threshold" value={localConfig.curve_threshold || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+        </div>
+      )}
 
-      <div>
-        <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
-        <input
-          type="number"
-          step="0.1"
-          name="maneuver_threshold"
-          value={localConfig.maneuver_threshold}
-          onChange={handleChange}
-          style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }}
-        />
-        <small style={{ color: "#888", fontSize: "0.75em" }}>Precisión requerida en cambios de marcha.</small>
-      </div>
+      {/* GRUPO 2: PLANEADOR DE RUTAS (A*) */}
+      <GroupHeader id="planner" label="Planeador (A*)" icon="🧠" />
+      {activeGroup === "planner" && (
+        <div style={{ paddingLeft: "5px" }}>
+          <div>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Marcha Atrás:</label>
+            <input type="number" step="1.0" name="backward_weight" value={localConfig.backward_weight || 30.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
+            <input type="number" step="1.0" name="steering_cost" value={localConfig.steering_cost || 20.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Cambios (D/R):</label>
+            <input type="number" step="10.0" name="gear_switch_cost" value={localConfig.gear_switch_cost || 150.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+        </div>
+      )}
+
+      {/* GRUPO 3: CONTROLADOR (PILOTO) */}
+      <GroupHeader id="pilot" label="Piloto Automático" icon="🏎️" />
+      {activeGroup === "pilot" && (
+        <div style={{ paddingLeft: "5px" }}>
+          <div>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Distancia Visión (Lookahead):</label>
+            <input type="number" step="0.1" name="lookahead_distance" value={localConfig.lookahead_distance || 2.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Sensibilidad Volante (Kp):</label>
+            <input type="number" step="0.5" name="steering_kp" value={localConfig.steering_kp || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Velocidad Base:</label>
+            <input type="number" step="0.1" name="base_speed" value={localConfig.base_speed || 0.4} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: "5px", marginTop: "10px" }}>
         <button

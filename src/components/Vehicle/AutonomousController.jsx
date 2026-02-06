@@ -3,6 +3,8 @@ import { useFrame } from "@react-three/fiber";
 import { useStore } from "../../store/useStore";
 import { findPathAsync } from "../../utils/pathfinding"; // Importar pathfinding
 
+import { startNextTestLeg } from "../../utils/testRunner"; // Importar lógica de test
+
 export function AutonomousController() {
   // Extraemos el estado y las funciones del store global (Zustand)
   const {
@@ -25,64 +27,15 @@ export function AutonomousController() {
   // Referencia para saber en qué punto de la ruta (índice) estamos actualmente
   const currentIndex = useRef(0);
 
-  // Si desactivamos el modo autónomo, reseteamos el índice a 0 para la próxima vez
   useEffect(() => {
-    if (!isAutonomous) currentIndex.current = 0;
-  }, [isAutonomous]);
-
-  // Resetear índice si cambia la ruta (Nueva grabación cargada o recálculo)
-  useEffect(() => {
-    currentIndex.current = 0;
-  }, [currentPath]);
-
-  // Función Helper para iniciar siguiente tramo
-  const startNextTestLeg = async () => {
-    // Buscar todos los destinos
-    const destinations = Object.entries(gridData).filter(
-      ([k, v]) => v.type === "destination"
-    );
-
-    if (destinations.length === 0) return;
-
-    // Elegir uno al azar (idealmente distinto al actual, pero random es random)
-    const randomIdx = Math.floor(Math.random() * destinations.length);
-    const [destKey, destVal] = destinations[randomIdx];
-    const [destX, destZ] = destKey.split(",").map(Number);
-
-    console.log(`[TEST] Iniciando tramo hacia: ${destVal.name || "Destino"} (${destX}, ${destZ})`);
-
-    // Calcular ruta
-    // Usamos el estado actual del vehiculo (que ya está frenado)
-    // OJO: vehicleState puede no estar actualizado al milisegundo en el closure, 
-    // pero para el inicio está bien.
-    const currentVacc = useStore.getState().vehicleState;
-
-    try {
-      const result = await findPathAsync(
-        { x: currentVacc.x, z: currentVacc.z, heading: currentVacc.heading },
-        { x: destX, z: destZ },
-        gridData,
-        GRID_SIZE,
-        (explored) => setExplored(explored)
-      );
-
-      if (result.path) {
-        setPath(result.path);
-        setExplored(result.explored);
-        setTargetDestination(destVal);
-        setAutonomous(true); // Reactivar
-      } else {
-        console.error("[TEST] Falló ruta. Reintentando otro...");
-        // Podríamos reintentar recursivamente con limite
-      }
-    } catch (e) {
-      console.error(e);
+    if (!isAutonomous || currentPath) {
+      currentIndex.current = 0;
     }
-  };
+  }, [isAutonomous, currentPath]);
 
   // useFrame corre en cada frame de la simulación (aprox 60fps)
   useFrame(() => {
-    // LEER ESTADO FRESCO DIRECTAMENTE DEL STORE (Evitar closures viejos)
+    // con la afirmacion de abajo le decis de todos los valores que trae getState, dame solo los detallados entre llaves
     const { isAutonomous, currentPath, vehicleState } = useStore.getState();
 
     // Si no está en modo autónomo o no hay ruta, no hacemos nada
@@ -93,24 +46,38 @@ export function AutonomousController() {
     let bestIndex = currentIndex.current;
 
     // Ventana de escaneo: Miramos 50 puntos hacia adelante (aprox 25-50 metros)
+    //defino cuantas posiciones voy a scanear. -> desde donde estoy + 50
     const SCAN_WINDOW = 50;
+    //defino la distancia minima para considerar un punto como el mejor, inicializado en infinito para que cualquier sea mejor
     let closestDist = Infinity;
+    //defino el nuevo mejor indice, inicializado en el mejor indice actual
     let newBestIndex = bestIndex;
 
+    //defino el maximo de scan, que es el minimo entre la longitud de la ruta y el mejor indice actual + la ventana de escaneo
     const maxScan = Math.min(currentPath.length, bestIndex + SCAN_WINDOW);
 
-    // Buscamos el punto más cercano en la ventana futura
+    //asigno a p, el valor del indice, desde donde estoy al maximo escaniable
     for (let i = bestIndex; i < maxScan; i++) {
       const p = currentPath[i];
+
+      // Si el punto futuro 'i' tiene una dirección distinta al punto actual 'bestIndex', abortamos seguir buscando indices mas alla...
+      // Esto es para evitar que el auto intente ir a un punto de reversa estando en drive, por ejemplo.
+      if (p.direction !== currentPath[bestIndex].direction) {
+        break;
+      }
+
+      //calculo la distancia entre el punto actual y el punto futuro
       const dist = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
+      //si la distancia es menor a la distancia minima, se pisa...
+      //el objetivo es que si por alguna razon algun punto de todos los que vos ves, esta mas cerca que la distancia que tenias, vayas por ese. 
+      //evalua en cada frame todos los puntos, por eso puede ver cual es el mas cercano
       if (dist < closestDist) {
         closestDist = dist;
         newBestIndex = i;
       }
     }
 
-    // Si encontramos un punto más adelantado que está razonablemente cerca (< 15m), saltamos a él.
-    // Esto repara el caso donde "cortamos curva" y el punto anterior quedó lejos pero nunca tocamos el radio de llegada.
+
     if (newBestIndex > bestIndex && closestDist < 15.0) {
       bestIndex = newBestIndex;
     }
@@ -127,9 +94,17 @@ export function AutonomousController() {
     const { config } = useStore.getState();
     let arrivalThreshold = config.arrival_threshold; // Default 3.0 or user value
 
-    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos
+    // Check for Curve (Si el próximo tramo o el actual tienen curva)
+    // nextNode.steer indica la curvatura del tramo que EMPIEZA en 'node' y termina en 'nextNode' ??
+    // No, nextNode.steer es el steer usado para llegar A nextNode desde node.
+    // Si ese steer es alto, es que vamos a entrar/recorrer una curva. Necesitamos precisión en el punto de inicio (node).
+    if (nextNode && Math.abs(nextNode.steer) > 0.05) {
+      arrivalThreshold = config.curve_threshold;
+    }
+
+    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos (Prioridad Máxima)
     if (nextNode && nextNode.direction !== node.direction) {
-      arrivalThreshold = config.maneuver_threshold; // Default 0.5
+      arrivalThreshold = config.maneuver_threshold;
     }
 
     // Si estamos lo suficientemente cerca, pasamos al siguiente punto de la lista
@@ -137,11 +112,11 @@ export function AutonomousController() {
       // 1. Miramos si el siguiente punto implica cambiar de marcha
       const willChangeDir = nextNode && nextNode.direction !== node.direction;
       if (willChangeDir) {
-        // MAURI: FIX DE FRENADO
-        // Si hay que cambiar de marcha, NO avanzamos hasta estar QUIETOS.
-        // Tolerancia de velocidad: 0.1 (aprox casi detenido)
-        if (Math.abs(vehicleState.speed) > 0.1) {
-          setThrottle(0);
+        // MAURI: FIX DE FRENADO ACTIVO
+        // Si hay que cambiar de marcha, NO avanzamos hasta estar QUIETOS (o casi).
+        // Usamos 0.0001 para "trickear" al motor de físicas y que aplique BRAKING en vez de FRICTION (coasting).
+        if (Math.abs(vehicleState.speed) > 0.05) {
+          setThrottle(0.0001); // FRENADO ACTIVO
           return; // Esperamos frenar dentro del radio de 0.5m
         }
       }
@@ -184,17 +159,23 @@ export function AutonomousController() {
     // Buscamos un punto un poco más adelante para que el giro sea suave
     // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
     const isManuever = nextNode && nextNode.direction !== node.direction;
-    // MAURI: Dynamic Lookahead
-    // Base 2.0m + 0.5m por cada m/s de velocidad. Max 6.0m.
-    // Esto evita que el auto zigzaguee (overcorrect) a altas velocidades.
-    let dynamicLookahead = 2.0 + Math.abs(vehicleState.speed) * 0.5;
+
+    // MAURI: Dynamic Lookahead Configurable
+    // Base toma del store (default 2.0). 
+    // + 0.5m por cada m/s de velocidad. Max 6.0m.
+    const userLookahead = config.lookahead_distance || 2.0;
+
+    let dynamicLookahead = userLookahead + Math.abs(vehicleState.speed) * 0.5;
     if (dynamicLookahead > 6.0) dynamicLookahead = 6.0;
 
     let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
 
     // Si estamos empezando, miramos más cerca para no saltarnos curvas cerradas iniciales
-    if (currentIndex.current < 5) {
+    // (Solo si el usuario no ha puesto un lookahead muy pequeño ya de por sí)
+    if (currentIndex.current < 5 && userLookahead > 1.5) {
       LOOKAHEAD_DIST = 1.5;
+    } else if (currentIndex.current < 5) {
+      LOOKAHEAD_DIST = userLookahead;
     }
 
     // 1. Inicializamos el índice de "búsqueda hacia adelante" en la posición actual del auto.
@@ -298,7 +279,14 @@ export function AutonomousController() {
     // --- CONTROL DEL VOLANTE (Steering) ---
     // MAURI: En reversa (effectiveDir === -1) aumentamos la ganancia para corregir agresivamente (-6.0)
     // En avance también subimos a (-5.0) para evitar que vaya "flotando" paralelo a la línea.
-    const Kp = effectiveDir === -1 ? -6.0 : -5.0;
+
+    // Configurable Kp (Sensitivity) - Default 2.5 (Antes 5.0 era muy brusco)
+    const userKp = config.steering_kp || 2.5;
+
+    // Usamos el Kp configurado (negativo)
+    // En reversa mantenemos el mismo Kp o incluso menor para evitar latigazos.
+    const Kp = effectiveDir === -1 ? -userKp : -userKp;
+
     const maxSteer = 0.8; // Límite físico del volante
     let newSteer = angleError * Kp;
 
@@ -319,7 +307,7 @@ export function AutonomousController() {
     let throttleFactor =
       1.0 - Math.min(Math.abs(angleError) / maxTurnError, 1.0);
 
-    const baseThrottle = 0.4; // Aceleración normal
+    const baseThrottle = config.base_speed || 0.4; // Aceleración normal configurable
     const minThrottle = 0.2; // Aceleración mínima
 
     // Calculamos un acelerador proporcional
@@ -336,6 +324,18 @@ export function AutonomousController() {
       }
     }
 
+    // --- MAURI: DISTANCE-BASED APPROACH (Aproximación Suave) ---
+    // Calculamos distacia exacta al próximo cambio de marcha para ir soltando el acelerador.
+    let distToManeuver = 999;
+    for (let i = currentIndex.current; i < Math.min(currentIndex.current + 20, currentPath.length); i++) {
+      if (i > currentIndex.current && currentPath[i].direction !== currentPath[i - 1].direction) {
+        // Distancia aproximada (suma de segmentos sería mejor, pero hipotenusa directa sirve si está cerca)
+        const p = currentPath[i];
+        distToManeuver = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
+        break;
+      }
+    }
+
     // --- MAURI: PREDICTIVE BRAKING (Detección de Curvas Futuras) ---
     // Miramos "n" nodos hacia adelante para ver si viene una curva fuerte.
     // Si detectamos cambio de dirección o giro, desaceleramos ANTES de llegar.
@@ -344,21 +344,40 @@ export function AutonomousController() {
 
     for (let i = currentIndex.current; i < Math.min(currentIndex.current + lookAheadCount, currentPath.length); i++) {
       const p = currentPath[i];
-      // Si hay un nodo con steering distinto de 0 (curva) o cambio de marcha
-      if (Math.abs(p.steer) > 0.1 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
+      // Si hay un nodo con steering alto (curva cerrada) o cambio de marcha
+      // MAURI: Subimos umbral a 0.25 para que no detecte curvitas suaves del A* como "CURVA PELIGROSA"
+      if (Math.abs(p.steer) > 0.25 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
         curveAhead = true;
         break;
       }
     }
 
     if (curveAhead) {
-      // Limitamos la velocidad si viene una curva
-      // MAURI: Frenado agresivo. Si vamos a más de 1.5 (muy despacio), soltamos acelerador.
-      if (vehicleState.speed > 1.5) {
-        newThrottle = 0; // Soltar acelerador para frenar
+      // MAURI: SMOOTH SPEED LIMITER
+      // En vez de frenar a cero si pasamos de 1.0, definimos un límite y modulamos.
+      const targetSpeedLimit = 2.5; // MAURI: Subimos de 1.0 a 2.5 para que fluya
+
+      if (vehicleState.speed > targetSpeedLimit + 0.5) {
+        // Si nos pasamos mucho (+0.5 m/s), FRENADO ACTIVO.
+        newThrottle = 0.0001;
+      } else if (vehicleState.speed > targetSpeedLimit) {
+        // Si nos pasamos un poco, solo soltamos acelerador (Coast).
+        newThrottle = 0;
       } else {
-        newThrottle = Math.min(newThrottle, 0.15); // Mantener velocidad "paso de hombre" en curvas
+        // Si estamos abajo del límite, ya no forzamos 0.15 (muy lento).
+        // Dejamos que el throttle calculado (que ya considera angleError) actúe, 
+        // pero lo capamos un poco (60%) por seguridad.
+        newThrottle = Math.min(newThrottle, 0.6); // ------si zigzague se baja la vel----
       }
+    }
+
+    // MAURI: MODULACIÓN POR DISTANCIA (Anti-Overshoot)
+    if (distToManeuver < 8.0) {
+      const approachFactor = Math.max(0.1, distToManeuver / 8.0); // De 1.0 bajando a 0.1
+      newThrottle = newThrottle * approachFactor;
+
+      // Asegurar un mínimo de tracción para no quedarnos cortos (0.05 es muy poco, 0.08 asegura movimiento lento)
+      if (newThrottle < 0.08) newThrottle = 0.08;
     }
 
     // Aplicamos el acelerador final

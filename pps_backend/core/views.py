@@ -37,7 +37,14 @@ def get_config(request):
     
     return JsonResponse({
         "arrival_threshold": config.arrival_threshold,
-        "maneuver_threshold": config.arrival_threshold_maneuver
+        "maneuver_threshold": config.arrival_threshold_maneuver,
+        "curve_threshold": config.arrival_threshold_curve,
+        "lookahead_distance": config.lookahead_distance,
+        "backward_weight": config.backward_weight,
+        "steering_cost": config.steering_cost,
+        "gear_switch_cost": config.gear_switch_cost,
+        "steering_kp": config.steering_kp,
+        "base_speed": config.base_speed
     })
 
 @csrf_exempt
@@ -52,8 +59,17 @@ def update_config(request):
                 # Retornamos error o mocks
                 return JsonResponse({"status": "error", "message": "No user config found"}, status=404)
 
-            config.arrival_threshold = float(data.get("arrival_threshold", config.arrival_threshold))
-            config.arrival_threshold_maneuver = float(data.get("maneuver_threshold", config.arrival_threshold_maneuver))
+            config.arrival_threshold = data.get("arrival_threshold", config.arrival_threshold)
+            config.arrival_threshold_maneuver = data.get("arrival_threshold_maneuver", config.arrival_threshold_maneuver)
+            config.arrival_threshold_curve = data.get("curve_threshold", config.arrival_threshold_curve)
+            config.lookahead_distance = data.get("lookahead_distance", config.lookahead_distance)
+            
+            config.backward_weight = data.get("backward_weight", config.backward_weight)
+            config.steering_cost = data.get("steering_cost", config.steering_cost)
+            config.gear_switch_cost = data.get("gear_switch_cost", config.gear_switch_cost)
+            config.steering_kp = data.get("steering_kp", config.steering_kp)
+            config.base_speed = data.get("base_speed", config.base_speed)
+            
             config.save()
             return JsonResponse({"status": "ok"})
         except Exception as e:
