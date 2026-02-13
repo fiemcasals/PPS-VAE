@@ -55,7 +55,17 @@ export function DetectionsHUD() {
             ctx.rect(x, y, width, height);
             ctx.stroke();
 
-            const text = `${prediction.class} ${(prediction.score * 100).toFixed(0)}%`;
+            // MAURI: Distance Estimation for People
+            let distanceInfo = "";
+            if (prediction.class === "person") {
+                // Heurística de Distancia Monocular
+                // D = (RealHeight * FocalLength) / ImageHeight
+                // Asumimos altura persona ~1.7m y Factor Focal ~1000 (ajustable)
+                const estimatedDist = (1.7 * 1000) / height;
+                distanceInfo = ` - ${estimatedDist.toFixed(1)}m`;
+            }
+
+            const text = `${prediction.class} ${(prediction.score * 100).toFixed(0)}%${distanceInfo}`;
             ctx.fillText(text, x, y > 20 ? y - 10 : y + 20);
         });
 
