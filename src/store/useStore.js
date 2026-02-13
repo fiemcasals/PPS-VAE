@@ -17,9 +17,14 @@ export const useStore = create((set) => ({
   telemetry: { speed: 0, position: [0, 0, 0], acceleration: 0 },
   detectionThresholds: { frontal: 0.15, bifocal: 0.5 },
   isDetectionEnabled: false, // MAURI: Global toggle for object detection
+  nearestHumanDistance: Infinity, // MAURI: SAFETY SYSTEM - Nearest person distance
+  safetyWarningAck: false, // MAURI: SAFETY SYSTEM - User acknowledged warning
+
   setDetectionEnabled: (value) => set({ isDetectionEnabled: value }),
   setDetectionThreshold: (camera, value) =>
     set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
+  setNearestHumanDistance: (dist) => set({ nearestHumanDistance: dist }),
+  setSafetyWarningAck: (ack) => set({ safetyWarningAck: ack }),
 
   // --- ESTADO DE NAVEGACIÓN ---
   currentPath: null,
@@ -41,11 +46,11 @@ export const useStore = create((set) => ({
     maneuver_threshold: 1,
     curve_threshold: 1.5,
     lookahead_distance: 2.0,
-    backward_weight: 30.0,
+    backward_weight: 100.0, // MAURI: Increased from 30.0 to 100.0 (Strong Penalty for Sustained Reverse)
     steering_cost: 20.0,
     gear_switch_cost: 50.0,
     steering_kp: 5.0,
-    base_speed: 0.4
+    base_speed: 0.25 // MAURI: Reduced from 0.4 per user request (Anti-Derailing)
   }, // Valores por defecto
 
   fetchConfig: async () => {

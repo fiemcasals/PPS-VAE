@@ -2,9 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useStore } from "../../store/useStore";
 import { useObjectDetection } from "../../hooks/useObjectDetection";
 
+// MAURI: Disabled Overlay on 3D World (User Request: Only Bifocal Feed)
 export function DetectionsHUD() {
+    return null; // Force disable
+
     const cameraMode = useStore((state) => state.cameraMode);
-    const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // MAURI: Global Toggle
+    // const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // Logic moved to background
     const detectionThresholds = useStore((state) => state.detectionThresholds);
     const canvasRef = useRef(null);
     const [sourceElement, setSourceElement] = useState(null);

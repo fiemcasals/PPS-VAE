@@ -183,7 +183,7 @@ export function EditorToolbar() {
         if (e === Infinity) {
           weightedMap[key] = Infinity;
         } else {
-          weightedMap[key] = s + (e * 2.5);
+          weightedMap[key] = s + (e * 5.0); // MAURI: Stronger Gradient 5.0
         }
       });
 
@@ -213,8 +213,8 @@ export function EditorToolbar() {
         setExplored(result.explored);
         setTargetDestination(dest);
         setAutonomous(true);
-        setShowDestinations(false);
-        setOpen(false); // MAURI: Close the tool menu automatically
+        // setOpen(false); // MAURI: Already closed at start
+        // setShowDestinations(false); // MAURI: Already closed at start
       } else {
         alert("No se encontró ruta (A* falló incluso con guía).");
       }
@@ -228,6 +228,9 @@ export function EditorToolbar() {
 
   const handleItineraryDrive = async () => {
     if (isCalculating || itinerary.length === 0) return;
+    // MAURI: Close menus immediately for feedback
+    setOpen(false);
+    setShowDestinations(false);
     setIsCalculating(true);
     setExplored([]);
     setPath([]);

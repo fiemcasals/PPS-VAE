@@ -422,6 +422,33 @@ export function AutonomousController() {
       if (newThrottle < 0.08) newThrottle = 0.08;
     }
 
+    // --- MAURI: SISTEMA DE SEGURIDAD (PERSONAS) ---
+    // Leemos la distancia a la persona más cercana detectada por cámaras
+    const { nearestHumanDistance } = useStore.getState();
+    const SAFETY_STOP_DIST = 1.0;
+    const SAFETY_SLOW_DIST = 5.0;
+
+    let safetyOverride = false;
+
+    // 1. PELIGRO INMINENTE (< 1m): Parada Total
+    if (nearestHumanDistance < SAFETY_STOP_DIST) {
+      newThrottle = 0;
+      safetyOverride = true;
+      // Force Brake (negative throttle/braking logic if supported, or just 0)
+      // En este simulador simple, 0 es coasting/friccion. 
+      // Podriamos setear un valor negativo si hubiese logica de marcha atras automática, pero mejor 0 seguro.
+    }
+    // 2. PRECAUCIÓN (< 5m): Paso de Hombre (max 1.5 m/s)
+    else if (nearestHumanDistance < SAFETY_SLOW_DIST) {
+      const PASO_HOMBRE_SPEED = 1.0; // m/s
+      if (vehicleState.speed > PASO_HOMBRE_SPEED) {
+        newThrottle = 0; // Dejar de acelerar para bajar velocidad
+      } else {
+        newThrottle = Math.min(newThrottle, 0.2); // Aceleración muy suave para mantener paso
+      }
+      safetyOverride = true;
+    }
+
     // Aplicamos el acelerador final
     if (!canAccelerate) {
       //recuerdo que canAccelerate es true si no vas en direccion contraria a donde deberias ir. de ser asi el auto se frena, antes de darle la nueva velocidad en la direccion correcta

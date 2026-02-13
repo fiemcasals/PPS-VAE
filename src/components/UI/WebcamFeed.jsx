@@ -5,17 +5,20 @@ import { useObjectDetection } from "../../hooks/useObjectDetection";
 export function WebcamFeed() {
     const cameraMode = useStore((state) => state.cameraMode);
     const detectionThresholds = useStore((state) => state.detectionThresholds);
+    const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // MAURI: Needed for background check
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [error, setError] = useState(null);
 
-    // Activamos detección solo si estamos en modo Bifocal
-    const { predictions, isLoading } = useObjectDetection(videoRef, cameraMode === "BIFOCAL", detectionThresholds.bifocal);
+    // Activamos detección si estamos en modo Bifocal O si el toggle global está ON (Background Safety)
+    const shouldDetect = cameraMode === "BIFOCAL" || isDetectionEnabled;
+    const { predictions, isLoading } = useObjectDetection(videoRef, shouldDetect, detectionThresholds.bifocal);
 
     useEffect(() => {
         let stream = null;
 
-        if (cameraMode === "BIFOCAL") {
+        // MAURI: Activate webcam if Bifocal Mode selected OR Detection Enabled (Background Safety)
+        if (cameraMode === "BIFOCAL" || isDetectionEnabled) {
             const getWebcam = async () => {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({
@@ -113,6 +116,30 @@ export function WebcamFeed() {
         predictions.forEach(p => pairedPredictions.push(p));
     }
 
+    // MAURI: SAFETY SYSTEM UPDATE
+    // Update global store with nearest person distance
+    useEffect(() => {
+        let minDist = Infinity;
+        const listToCheck = (cameraMode === "BIFOCAL") ? pairedPredictions : predictions;
+
+        listToCheck.forEach(p => {
+            if (p.class === "person") {
+                let d = Infinity;
+                if (p.stereoDist) d = p.stereoDist;
+                else d = 200 / p.bbox[3]; // Mono estimation
+
+                if (d < minDist) minDist = d;
+            }
+        });
+
+        // Update store
+        if (minDist < 10.0) {
+            console.log("[WebcamFeed] Person detected! Distance:", minDist);
+        }
+        useStore.getState().setNearestHumanDistance(minDist);
+
+    }, [predictions, pairedPredictions, cameraMode]);
+
     useEffect(() => {
         if (!canvasRef.current || !videoRef.current) return;
         const ctx = canvasRef.current.getContext("2d");
@@ -172,30 +199,43 @@ export function WebcamFeed() {
 
     }, [predictions, cameraMode, pairedPredictions]); // Dependencia actualizada para recalcular pares
 
-    if (cameraMode !== "BIFOCAL") return null;
+    // MAURI: Allow background running if detection enabled
+    const shouldRun = cameraMode === "BIFOCAL" || isDetectionEnabled;
+
+    if (!shouldRun) return null;
+
+    // Si NO es bifocal (estamos en background), renderizamos fuera de pantalla pero FULL RESOLUCIÓN
+    const isBackground = cameraMode !== "BIFOCAL";
+    const containerStyle = isBackground ? {
+        position: "fixed", top: 0, left: -2000, width: 640, height: 480, opacity: 0.1, pointerEvents: "none", zIndex: -1
+    } : {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        backgroundColor: "black",
+        zIndex: 50,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+    };
 
     return (
-        <div
-            style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100vw",
-                height: "100vh",
-                backgroundColor: "black",
-                zIndex: 50,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-            }}
-        >
-            {error ? (
-                <div style={{ color: "red", textAlign: "center", background: "rgba(0,0,0,0.8)", padding: "20px", borderRadius: "8px" }}>
-                    <h3> ERROR DE CÁMARA </h3>
-                    <p>{error}</p>
+        <>
+            {/* GLOBAL ERROR ALERT (Visible always if error exists) */}
+            {error && (
+                <div style={{
+                    position: "fixed", top: "10px", left: "50%", transform: "translateX(-50%)",
+                    backgroundColor: "red", color: "white", padding: "15px", borderRadius: "8px", zIndex: 99999,
+                    boxShadow: "0 0 10px black", fontWeight: "bold"
+                }}>
+                    ❌ ERROR DE CÁMARA (SEGURIDAD): {error}
                 </div>
-            ) : (
-                // Contenedor 'crop'
+            )}
+
+            <div style={containerStyle}>
+                {/* Contenedor 'crop' para Video y Canvas */}
                 <div style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }}>
                     {/* Video */}
                     <video
@@ -203,7 +243,7 @@ export function WebcamFeed() {
                         style={{
                             position: "absolute",
                             top: 0,
-                            left: "0", // MAURI: SHOW LEFT EYE (0% instead of -100%)
+                            left: "0",
                             width: "200%",
                             height: "100%",
                             objectFit: "fill"
@@ -212,39 +252,40 @@ export function WebcamFeed() {
                         playsInline
                         muted
                     />
-                    {/* Canvas Overlay perféctamente alineado al video (mismo left/width) */}
+                    {/* Canvas Overlay */}
                     <canvas
                         ref={canvasRef}
                         style={{
                             position: "absolute",
                             top: 0,
-                            left: "0", // MAURI: MATCH VIDEO (LEFT EYE)
+                            left: "0",
                             width: "200%",
                             height: "100%",
                             pointerEvents: "none"
                         }}
                     />
                 </div>
-            )}
 
-            {/* Overlay Title */}
-            <div style={{
-                position: "absolute",
-                top: "20px",
-                left: "20px", // MAURI: Left Align to be safe in split/crop views
-                // transform: "translateX(-50%)", // No centering needed
-                color: "lime",
-                fontFamily: "monospace",
-                fontSize: "1.5rem",
-                background: "rgba(0,0,0,0.5)",
-                padding: "5px 15px",
-                borderRadius: "4px",
-                display: "flex",
-                gap: "20px"
-            }}>
-                <span>VISTA CÁMARA BIFOCO</span>
-                {isLoading && <span style={{ color: "yellow", fontSize: "1rem" }}>(Cargando IA...)</span>}
+                {/* Overlay Title - Only if visible (Not Background) */}
+                {!isBackground && (
+                    <div style={{
+                        position: "absolute",
+                        top: "20px",
+                        left: "20px",
+                        color: "lime",
+                        fontFamily: "monospace",
+                        fontSize: "1.5rem",
+                        background: "rgba(0,0,0,0.5)",
+                        padding: "5px 15px",
+                        borderRadius: "4px",
+                        display: "flex",
+                        gap: "20px"
+                    }}>
+                        <span>VISTA CÁMARA BIFOCO</span>
+                        {isLoading && <span style={{ color: "yellow", fontSize: "1rem" }}>(Cargando IA...)</span>}
+                    </div>
+                )}
             </div>
-        </div>
+        </>
     );
 }

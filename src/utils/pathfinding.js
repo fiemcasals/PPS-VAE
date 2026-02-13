@@ -4,12 +4,14 @@ const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno s
 // MAURI: "Conservative Planning": Limitamos el "cerebro" al 40% del volante (0.32 rad).
 // El auto FÍSICAMENTE puede girar 0.8, pero el PLAN nunca pedirá más de 0.32.
 // Esto fuerza curvas mucho más amplias (radios grandes) que el límite físico.
-const STEER_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
+// MAURI: "Conservative Planning": Limitamos el "cerebro" al 35% del volante (0.35 rad).
+// Reducimos de 0.4 a 0.35 para forzar curvas más abiertas y evitar que el auto se pase.
+const STEER_STEPS = [-0.3, 0, 0.3];
 const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
 
 // MAURI: Factor de peso BASE para la Heurística (h).
 // Aumentaremos este valor dinámicamente si la búsqueda tarda mucho.
-const BASE_HEURISTIC_WEIGHT = 2.0;
+const BASE_HEURISTIC_WEIGHT = 6.0; // MAURI: Reduced from 20.0 to 2.0 to allow exploration.
 
 class Node {
   constructor(x, z, theta, g, h, parent = null, steer = 0, dir = 1, weight = BASE_HEURISTIC_WEIGHT) {
@@ -139,9 +141,8 @@ const heuristic = (pos, goal, macroContext) => {
     const d = Math.hypot(pos.x - node.x, pos.z - node.z);
 
     // Heurística: Costo de pasar por este nodo rojo.
-    // H = Costo_Total_De_Ruta_Por_Ahi + (Distancia_Nuestra_Al_Nodo * Factor)
-    // Factor de atracción 2.0 para priorizar cercanía.
-    const attractionFactor = 2.0;
+    // Factor de atracción 0.0: Libertad total para alejarse del centro y usar el ancho de la calle.
+    const attractionFactor = 0.0; // MAURI: Disabled (0.0) to allow U-turns using full road width.
     const totalH = combinedCost + (d * attractionFactor);
 
     if (totalH < minCost) {

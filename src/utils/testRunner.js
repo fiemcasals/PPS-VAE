@@ -71,7 +71,7 @@ export const startNextTestLeg = async () => {
                         if (e === Infinity) {
                             weightedMap[key] = Infinity;
                         } else {
-                            weightedMap[key] = s + (e * 2.5);
+                            weightedMap[key] = s + (e * 5.0); // MAURI: Stronger Gradient (aligned with EditorToolbar)
                         }
                     });
 
