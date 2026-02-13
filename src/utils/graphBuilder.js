@@ -1,110 +1,146 @@
 /**
  * graphBuilder.js
  * 
- * Módulo encargado de analizar el mapa de rejilla (gridData) y construir un Grafo Topológico.
- * Identifica nodos clave (Intersecciones y Destinos) y calcula las conexiones (aristas) entre ellos.
- * 
- * Uso:
- * const graph = buildTopology(gridData, gridSize);
+ * Módulo encargado de construir el Grafo Macro (Puntos Rojos).
+ * Genera nodos dispersos sobre la red vial y los conecta si son alcanzables.
  */
 
 export const buildTopology = (gridData, gridSize) => {
     console.time("BuildTopology");
-    const nodes = {}; // Mapa de nodos clave: { "x,z": { type, x, z, neighbors: [] } }
 
-    // 1. Identificar Nodos Clave (Intersecciones y Destinos)
+    // 1. Identificar Celdas Candidatas (Carreteras y Destinos)
+    const roadCells = [];
+    const destinations = [];
+
     Object.entries(gridData).forEach(([key, cell]) => {
-        // Un destino SIEMPRE es un nodo clave
+        const [x, z] = key.split(',').map(Number);
         if (cell.type === 'destination') {
-            const [x, z] = key.split(',').map(Number);
-            nodes[key] = { id: key, x, z, type: 'destination', neighbors: [] };
-            return;
-        }
-
-        // Para carreteras, verificamos si es una intersección
-        if (cell.type === 'road') {
-            const [x, z] = key.split(',').map(Number);
-            const neighborCount = countRoadNeighbors(x, z, gridData, gridSize);
-
-            // Si tiene más de 2 caminos (Intersección en T o Cruz) o es un callejón sin salida (1 camino)
-            // Nota: Incluimos dead-ends (1) para que el grafo cubra todo el mapa navegable.
-            if (neighborCount !== 2) {
-                nodes[key] = { id: key, x, z, type: 'intersection', neighbors: [] };
-            }
+            destinations.push({ id: key, x, z, type: 'destination' });
+        } else if (cell.type === 'road') {
+            roadCells.push({ id: key, x, z, type: 'road' });
         }
     });
 
-    console.log(`[Topología] Nodos identificados: ${Object.keys(nodes).length}`);
+    // 2. Generar Nodos Macro (Sampling)
+    // - Los destinos SIEMPRE son nodos.
+    // - Las carreteras se muestrean con una distancia mínima (Radio de exclusión).
+    const macroNodes = {}; // Map: id -> { id, x, z, type, neighbors: [] }
 
-    // 2. Construir Aristas (Conectar los nodos)
-    // Para cada nodo clave, lanzamos un BFS/FloodFill limitado para encontrar sus vecinos clave inmediatos.
-    Object.values(nodes).forEach(node => {
-        findConnectedNodes(node, nodes, gridData, gridSize);
+    // Agregar Destinos primero
+    destinations.forEach(d => {
+        macroNodes[d.id] = { ...d, neighbors: [] };
+    });
+
+    // Configuración de Densidad
+    // Radio de exclusión: Qué tan separados queremos los puntos rojos (aprox 20-30 metros)
+    // GridSize suele ser ~2m. 15 celdas = 30 metros.
+    const SEPARATION_RADIUS = gridSize * 3;
+    const SEPARATION_SQ = SEPARATION_RADIUS ** 2;
+
+    // Barajar carreteras para sampling aleatorio (Poisson-ish)
+    shuffleArray(roadCells);
+
+    roadCells.forEach(cell => {
+        // Verificar distancia con nodos ya existentes
+        let tooClose = false;
+        for (const existingId in macroNodes) {
+            const existing = macroNodes[existingId];
+            const d2 = (cell.x - existing.x) ** 2 + (cell.z - existing.z) ** 2;
+            if (d2 < SEPARATION_SQ) {
+                tooClose = true;
+                break;
+            }
+        }
+
+        if (!tooClose) {
+            macroNodes[cell.id] = { ...cell, neighbors: [] };
+        }
+    });
+
+    console.log(`[Topología] Nodos Macro generados: ${Object.keys(macroNodes).length}`);
+
+    // 3. Conectar Nodos (Construir Aristas)
+    // Para cada nodo, buscar otros nodos macro alcanzables dentro de un radio máximo.
+    const CONNECTION_RADIUS = gridSize * 8; // Debe ser mayor que SEPARATION_RADIUS (x2 aprox)
+
+    Object.values(macroNodes).forEach(node => {
+        findNeighborsBFS(node, macroNodes, gridData, gridSize, CONNECTION_RADIUS);
     });
 
     console.timeEnd("BuildTopology");
-    return nodes;
+    return macroNodes;
 };
 
-// Cuenta cuántos vecinos accesibles tiene una celda (Road o Destination)
-const countRoadNeighbors = (x, z, gridData, gridSize) => {
-    let count = 0;
-    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+// Helper: Fisher-Yates Shuffle
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
 
-    dirs.forEach(([dx, dz]) => {
-        const nx = x + dx;
-        const nz = z + dz;
-        const key = `${nx},${nz}`;
-        const cell = gridData[key];
-
-        // Es camino si existe y es road o destination
-        if (cell && (cell.type === 'road' || cell.type === 'destination')) {
-            count++;
-        }
-    });
-    return count;
-};
-
-// Busca nodos clave conectados a 'startNode' siguiendo la carretera
-const findConnectedNodes = (startNode, allNodes, gridData, gridSize) => {
+// Helper: BFS para encontrar vecinos macro alcanzables
+const findNeighborsBFS = (startNode, allNodes, gridData, gridSize, maxDist) => {
     const queue = [{ x: startNode.x, z: startNode.z, dist: 0 }];
     const visited = new Set();
     visited.add(startNode.id);
 
-    // BFS Local
-    while (queue.length > 0) {
+    // Limite de iteraciones por seguridad (evitar espirales infinitos en mapas muy grandes)
+    let ops = 0;
+    const MAX_OPS = 500;
+
+    while (queue.length > 0 && ops < MAX_OPS) {
+        ops++;
         const current = queue.shift();
 
-        // Direcciones cardinales
-        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        // Si nos alejamos demasiado, cortamos esta rama
+        if (current.dist > maxDist) continue;
 
-        dirs.forEach(([dx, dz]) => {
-            const nx = current.x + dx;
-            const nz = current.z + dz;
+        // Direcciones cardinales + diagonales
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+        for (const [dx, dz] of dirs) {
+            const nx = current.x + dx * gridSize; // Ojo: gridSize escalar
+            const nz = current.z + dz * gridSize;
+
+            // Reconstruir key (cuidado con decimales/redondeo si gridSize no es entero perfecto)
+            // Asumimos que las keys en gridData son ints o coherentes con la generación.
+            // Mejor buscar la celda más cercana o usar la lógica de coordenadas exacta.
+            // En PPS-VAE parece que las keys son "x,z" directas. 
+            // Si x avanzó gridSize, debería coincidir.
+
+            // FIX: Para asegurar match con gridData, usamos Math.round si es necesario, pero
+            // idealmente sumamos enteros si gridSize es 1, o floats controlados.
+            // Asumamos que gridData keys son `${x},${z}`.
+
             const key = `${nx},${nz}`;
 
-            // Si ya visitamos esta celda en este recorrido, saltar
-            if (visited.has(key)) return;
+            if (visited.has(key)) continue;
 
             const cell = gridData[key];
-            // Solo avanzamos por carretera/destinos
-            if (cell && (cell.type === 'road' || cell.type === 'destination')) {
+            // Solo caminar por Road/Destination parking
+            if (cell && (cell.type === 'road' || cell.type === 'destination' || cell.type === 'parking')) {
                 visited.add(key);
 
-                // ¿Es este vecino un Nodo Clave?
-                if (allNodes[key]) {
-                    // ¡Encontramos un vecino topológico!
-                    // Agregamos la conexión (Arista) y NO seguimos explorando por esta rama.
-                    // (La conexión es directa, no saltamos nodos)
+                // ¿Es este un Nodo Macro?
+                if (allNodes[key] && key !== startNode.id) {
+                    // ¡Encontramos un vecino!
+                    // Agregamos arista y NO seguimos expandiendo desde aquí (para no saltar nodos)
+                    // (Opcional: Si queremos redundancia, podríamos seguir, pero "tapar" caminos es mejor)
+                    const distToNeighbor = current.dist + gridSize; // Aprox
+                    // Calcular distancia real euclidiana para mayor precisión en el peso
+                    const realDist = Math.hypot(startNode.x - nx, startNode.z - nz);
+
                     startNode.neighbors.push({
                         id: key,
-                        dist: current.dist + gridSize // Distancia acumulada + 1 paso
+                        dist: realDist
                     });
                 } else {
-                    // No es nodo clave (es tramo intermedio), seguimos explorando
+                    // Sigue siendo camino intermedio
                     queue.push({ x: nx, z: nz, dist: current.dist + gridSize });
                 }
             }
-        });
+        }
     }
 };
+

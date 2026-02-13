@@ -25,8 +25,11 @@ export const findMacroPath = (graph, startNodeId, endNodeId) => {
 
     distances[startNodeId] = 0;
 
+    let visitedCount = 0;
+    console.log(`[Dijkstra] Start: ${startNodeId} -> End: ${endNodeId}. Nodes in graph: ${Object.keys(graph).length}`);
+
     while (pq.size > 0) {
-        // Buscar nodo con menor distancia en el set
+        // Buscar nodo con menor distancia
         let minNode = null;
         let minDist = Infinity;
 
@@ -37,14 +40,23 @@ export const findMacroPath = (graph, startNodeId, endNodeId) => {
             }
         }
 
-        // Si no encontramos, o la distancia es infinita (inconexos), terminamos
-        if (minNode === null || minDist === Infinity) break;
-        if (minNode === endNodeId) break; // Llegamos
+        if (minNode === null || minDist === Infinity) {
+            console.warn(`[Dijkstra] Broken path? Visited: ${visitedCount}. Remaining PQ: ${pq.size}. MinDist: ${minDist}`);
+            break;
+        }
+
+        if (minNode === endNodeId) {
+            console.log(`[Dijkstra] Target found! Distance: ${minDist}. Visited: ${visitedCount}`);
+            break;
+        }
 
         pq.delete(minNode);
+        visitedCount++;
 
         // Relajar vecinos
         const neighbors = graph[minNode].neighbors;
+        // console.log(`[Dijkstra] Visiting ${minNode}, neighbors: ${neighbors.length}`);
+
         for (const edge of neighbors) {
             const alt = distances[minNode] + edge.dist;
             if (alt < distances[edge.id]) {

@@ -11,35 +11,34 @@ export function ScenarioManager({ isOpen, onClose }) {
     const { scenariosList, saveScenario, loadScenario, deleteScenario } =
         useScenarios();
 
-    // Función para guardar el escenario actual en la memoria del navegador (LocalStorage)
-    // Se guarda tanto la grilla (gridData) como los edificios (buildings).
-    // 1. Verifica que el nombre del escenario no esté vacío.
-    // 2. Obtiene el estado actual del diseño (gridData) directamente del store de Zustand.
-    // 3. Crea un objeto de escenario con un ID único, el nombre, la fecha de última modificación y el gridData.
-    // 4. Añade el nuevo escenario a la lista de escenarios existentes.
-    // 5. Persiste la lista actualizada de escenarios en el localStorage bajo la clave "vae_scenarios"
-    //    convirtiéndola a una cadena JSON.
-    // 6. Limpia el campo de entrada del nombre del escenario.
-    //
-    // Ejemplo de la lógica de guardado (implementada dentro de useScenarios):
-    /*
-    const saveScenarioLogic = (nameToSave, currentGridData) => {
-        if (!nameToSave.trim()) return;
+    // MAURI: Auto-load first scenario on startup
+    // And ensure "Empty" is at the end.
+    React.useEffect(() => {
+        // Sort list: "Empty" goes last, others alphabetical or default
+        const sorted = [...scenariosList].sort((a, b) => {
+            if (a.toLowerCase().includes("empty") || a.toLowerCase().includes("vacio")) return 1;
+            if (b.toLowerCase().includes("empty") || b.toLowerCase().includes("vacio")) return -1;
+            return a.localeCompare(b);
+        });
 
-        const newScenario = {
-            id: Date.now(), // ID único basado en tiempo
-            name: nameToSave,
-            lastModified: new Date().toLocaleString(),
-            gridData: currentGridData, // Guardamos TODO el mapa
-        };
-
-        // Recuperar escenarios existentes, añadir el nuevo y guardar
-        const existingScenarios = JSON.parse(localStorage.getItem("vae_scenarios") || "[]");
-        const updatedScenarios = [...existingScenarios, newScenario];
-        localStorage.setItem("vae_scenarios", JSON.stringify(updatedScenarios));
-        // En el hook, esto también actualizaría el estado interno de scenariosList
-    };
-    */
+        if (sorted.length > 0) {
+            // Only auto-load if grid is empty (initial load)
+            if (Object.keys(gridData).length === 0) {
+                const first = sorted[0];
+                console.log("Auto-loading scenario:", first);
+                const data = loadScenario(first);
+                if (data) {
+                    if (data.gridData) {
+                        loadGridData(data.gridData);
+                        loadBuildings(data.buildings || []);
+                    } else {
+                        loadGridData(data);
+                        loadBuildings([]);
+                    }
+                }
+            }
+        }
+    }, [scenariosList, loadScenario, loadGridData, loadBuildings, gridData]);
 
     if (!isOpen) return null;
 

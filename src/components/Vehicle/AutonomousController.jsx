@@ -345,8 +345,9 @@ export function AutonomousController() {
     for (let i = currentIndex.current; i < Math.min(currentIndex.current + lookAheadCount, currentPath.length); i++) {
       const p = currentPath[i];
       // Si hay un nodo con steering alto (curva cerrada) o cambio de marcha
-      // MAURI: Subimos umbral a 0.25 para que no detecte curvitas suaves del A* como "CURVA PELIGROSA"
-      if (Math.abs(p.steer) > 0.25 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
+      // MAURI: Subimos umbral a 0.5 (antes 0.25) para que NO detecte curvas por 'steer' (que el A* genera ruidoso).
+      // Esto hace que se comporte como la ruta grabada (que tiene steer=0), confiando en la reactividad del angleError.
+      if (Math.abs(p.steer) > 0.5 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
         curveAhead = true;
         break;
       }

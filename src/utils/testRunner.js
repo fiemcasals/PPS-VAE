@@ -9,7 +9,7 @@ import { findMacroPath, findNearestGraphNode } from "./topologyPathfinder";
 export const startNextTestLeg = async () => {
     // 1. Obtener acceso al estado global FRESH
     const state = useStore.getState();
-    const { gridData, GRID_SIZE, setPath, setExplored, setTargetDestination, setAutonomous, config, navGraph, setNavGraph } = state;
+    const { gridData, GRID_SIZE, setPath, setExplored, setTargetDestination, setAutonomous, config, navGraph, setNavGraph, setActiveMacroPath } = state;
 
     // --- TOPOLOGÍA (GRAFO) ---
     // Si no existe el grafo (o si se quiere refrescar), lo construimos.
@@ -45,6 +45,9 @@ export const startNextTestLeg = async () => {
 
     // --- MACRO-RUTA (DIJKSTRA) ---
     let macroPath = null;
+    // Limpiar ruta anterior visualmente
+    setActiveMacroPath([]);
+
     if (currentGraph) {
         const startGraphNode = findNearestGraphNode(currentGraph, currentVacc.x, currentVacc.z);
         const endGraphNode = findNearestGraphNode(currentGraph, destX, destZ);
@@ -55,6 +58,9 @@ export const startNextTestLeg = async () => {
 
             if (pathIds) {
                 console.log("[TEST] Secuencia de Nodos:", pathIds);
+                // VISUALIZACIÓN: Actualizar Store
+                setActiveMacroPath(pathIds);
+
                 // Convertir IDs a objetos nodo reales
                 macroPath = pathIds.map(id => currentGraph[id]);
             } else {

@@ -13,7 +13,7 @@ if [ -f model.json ]; then
     echo "model.json descargado."
     # Leer el JSON para encontrar los archivos binarios (shards)
     # Usamos grep/sed básico para extraer nombres de archivos .bin
-    grep -o '"[^"]*\.bin"' model.json | tr -d '"' | sort | uniq | while read -r bin_file; do
+    grep -o '"group1-shard[^"]*"' model.json | tr -d '"' | sort | uniq | while read -r bin_file; do
         echo "Descargando $bin_file..."
         wget -q "$BASE_URL/$bin_file" -O "$bin_file"
     done

@@ -1,16 +1,90 @@
 import { useStore } from "../../store/useStore";
+import { Line } from "@react-three/drei"; // Importar Line para dibujar conexiones
 
 export function MapVisualizer() {
   const gridData = useStore((state) => state.gridData);
-  const buildings = useStore((state) => state.buildings); // Nueva lista de edificios
+  const buildings = useStore((state) => state.buildings);
   const GRID_SIZE = useStore((state) => state.GRID_SIZE);
+  // MAURI: Obtener el grafo para visualizarlo
+  const navGraph = useStore((state) => state.navGraph);
+  const activeMacroPath = useStore((state) => state.activeMacroPath);
+  const exploredNodes = useStore((state) => state.exploredNodes);
+
+  // DEBUG: Check if we are receiving the path
+  if (activeMacroPath && activeMacroPath.length > 0) {
+    // Log only once or throttle? React renders often. 
+    // We'll log the first few nodes to check format.
+    // console.log("MapVisualizer ActivePath:", activeMacroPath[0], " GraphKeys:", Object.keys(navGraph||{})[0]);
+  }
 
   if (!gridData) return null;
 
   return (
     <group>
-      {/* 1. RENDERIZADO DE GRILLA (Caminos, Destinos, Árboles) */}
+      {/* 0. VISUALIZACIÓN DE NODOS EXPLORADOS (Removed per user request) */}
+
+
+      {/* 1. VISUALIZACIÓN DEL GRAFO TOPOLÓGICO (DEBUG) */}
+      {navGraph && Object.values(navGraph).map((node) => {
+        // MAURI: Check if this node is part of the ACTIVE MACRO PATH
+        let isTrace = false;
+        if (activeMacroPath && activeMacroPath.includes(node.id)) {
+          isTrace = true;
+          // console.log("🟢 Rendering Trace Node:", node.id);
+        }
+
+        return (
+          <group key={node.id}>
+            {/* Nodo (Esfera) */}
+            <mesh position={[node.x, 3, node.z]}>
+              <sphereGeometry args={[isTrace ? 1.2 : 0.8, 16, 16]} />
+              <meshStandardMaterial
+                // MAURI: User requests:
+                // - General Nodes (Intersections): RED
+                // - Active Path Nodes: BLUE
+                color={isTrace ? "#0000ff" : "#ff0000"}
+                emissive={isTrace ? "#000055" : "#550000"}
+                emissiveIntensity={0.5}
+              />
+            </mesh>
+
+            {/* Conexiones (Líneas) */}
+            {node.neighbors.map((neighbor) => {
+              // Solo dibujamos si el vecino existe en el grafo
+              if (!navGraph[neighbor.id]) return null;
+              const n = navGraph[neighbor.id];
+
+              // Check if EDGE is part of the ACTIVE MACRO PATH
+              let isEdgeTrace = false;
+              if (activeMacroPath && activeMacroPath.length > 1) {
+                const idx1 = activeMacroPath.indexOf(node.id);
+                const idx2 = activeMacroPath.indexOf(neighbor.id);
+                // Check adjacency in path list
+                if (idx1 !== -1 && idx2 !== -1 && Math.abs(idx1 - idx2) === 1) {
+                  isEdgeTrace = true;
+                }
+              }
+
+              return (
+                <Line
+                  key={`${node.id}-${neighbor.id}`}
+                  points={[[node.x, 3, node.z], [n.x, 3, n.z]]}
+                  color={isEdgeTrace ? "#0000ff" : "#ffaaaa"} // Blue active, pale red others
+                  lineWidth={isEdgeTrace ? 4 : 1}
+                  dashed={!isEdgeTrace}
+                  dashScale={2}
+                  dashSize={1}
+                  gapSize={1}
+                />
+              );
+            })}
+          </group>
+        );
+      })}
+
+      {/* 2. RENDERIZADO DE GRILLA (Caminos, Destinos, Árboles) */}
       {Object.entries(gridData).map(([key, value]) => {
+        // ...existing code...
         const [x, z] = key.split(",").map(Number);
 
         // ROAD, PARKING & DESTINATION

@@ -26,7 +26,10 @@ export const useStore = create((set) => ({
   targetDestination: null,
   explored: [], // Nodos explorados por A*
   navGraph: null, // Grafo Topológico
+  navGraph: null, // Grafo Topológico
+  activeMacroPath: null, // Ruta macro actual para visualización
   setNavGraph: (graph) => set({ navGraph: graph }),
+  setActiveMacroPath: (path) => set({ activeMacroPath: path }),
 
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
   config: {

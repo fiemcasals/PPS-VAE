@@ -16,13 +16,13 @@ class Node {
     this.x = x; // Posición X en el mundo
     this.z = z; // Posición Z en el mundo
     this.theta = theta; // Orientación del vehículo (radianes)
-    this.g = g; // Costo Real
-    this.h = h; // Heurística
+    this.g = g; // Costo Real, calculado mediante la suma de distancias entre nodos
+    this.h = h; // Heurística, calculada mediante la distancia euclidiana entre el nodo y el objetivo
     // F = G + H * Weight (Dinámico)
     this.f = g + h * weight;
-    this.parent = parent;
-    this.steer = steer;
-    this.direction = dir;
+    this.parent = parent; //Nodo padre, es decir, el nodo anterior en el camino
+    this.steer = steer;  //Angulo de giro
+    this.direction = dir; //Direccion (1 o -1)
   }
 }
 
@@ -33,9 +33,9 @@ class Node {
 // marginFactor:
 // - 0.9: PATHFINDING (Muy seguro, lejos de paredes)
 // - 0.6: SMOOTHING (Permite cortar un poco la "zona de seguridad" para hacer curvas)
-const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99) => {
+const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99, smoothing = 0.6) => {
   const hw = VEHICLE_CONFIG.WIDTH * marginFactor;
-  const hl = VEHICLE_CONFIG.LENGTH * 0.6;
+  const hl = VEHICLE_CONFIG.LENGTH * smoothing;
   const s = Math.sin(theta),
     c = Math.cos(theta); //en base al angulo, calcula la magnitud en x y z de los puntos del rectangulo que forma el auto
   const corners = [
@@ -47,8 +47,8 @@ const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99) => {
   ];
   // Check points
   for (const p of corners) {
-    const cx = Math.floor(p.x / cellSize) * cellSize + cellSize / 2;
-    const cz = Math.floor(p.z / cellSize) * cellSize + cellSize / 2;
+    const cx = Math.floor(p.x / cellSize) * cellSize + cellSize / 2;//cx representa la coordenada x de la celda
+    const cz = Math.floor(p.z / cellSize) * cellSize + cellSize / 2;//cz representa la coordenada z de la celda
     const cell = gridData[`${cx},${cz}`];
 
     // Si no existe celda o no es camino/destino/estacionamiento, hay colisión
@@ -94,33 +94,68 @@ class PriorityQueue {
 }
 
 // MAURI: Helper para distancia Punto-Segmento (Corredor Topológico)
-const distanceToSegment = (p, v, w) => {
-  const l2 = (v.x - w.x) ** 2 + (v.z - w.z) ** 2;
-  if (l2 === 0) return Math.hypot(p.x - v.x, p.z - v.z);
-  let t = ((p.x - v.x) * (w.x - v.x) + (p.z - v.z) * (w.z - v.z)) / l2;
+const distanceToSegment = (p, v, w) => { //p es el punto, v el nodo verde grande y w el destino
+  const l2 = (v.x - w.x) ** 2 + (v.z - w.z) ** 2; //l2 es la longitud al cuadrado del segmento, es decir la distancia desde un punto de la macro ruta, hasta el destino
+  if (l2 === 0) return Math.hypot(p.x - v.x, p.z - v.z); //el condicional sirve para cuando el segmento es un punto, en el caso de ser un punto la distancia es la distancia euclidiana, desde donde esta el auto, hasta ese punto, que basicamente es la meta
+  let t = ((p.x - v.x) * (w.x - v.x) + (p.z - v.z) * (w.z - v.z)) / l2;//el producto vectorial entre el vector que va desde v a p y el vector que va desde v a w dividido por la magnito maxima entre v y w, no da un valor entre 0 y 1, que representa cuando recorrido del segmento
   t = Math.max(0, Math.min(1, t));
-  return Math.hypot(
+  return Math.hypot( //la hipotenuza toma dos valores, x y z, y se le pasa la distancia entre el punto del auto y el destino, para eso tengo que tener en cuenta donde esta el auto, y restarle la suma de la posicion del nodo anterior mas la distancia recorrida del segmento, desde el nodo anterior al siguiente o destino 
     p.x - (v.x + t * (w.x - v.x)),
     p.z - (v.z + t * (w.z - v.z))
   );
 };
 
-// Heurística Aumentada: Euclidean + Corredor Topológico
-const heuristic = (pos, goal, macroPath) => {
+// Heurística Aumentada: Remaining Path Distance + Deviation
+const heuristic = (pos, goal, macroPath, macroDistances) => {
   const h_euclidean = Math.hypot(pos.x - goal.x, pos.z - goal.z);
 
-  if (!macroPath || macroPath.length < 2) return h_euclidean;
+  if (!macroPath || macroPath.length < 2 || !macroDistances) return h_euclidean;
 
-  // Calculamos distancia al "corredor" (la línea poliédrica de la macro-ruta)
-  let minDistToCorridor = Infinity;
+  // Encontrar el segmento más cercano y calcular cuánto falta de camino desde ahí
+  let minTotalDist = Infinity;
+  let bestDeviation = Infinity;
+
+  // Recorremos segmentos
   for (let i = 0; i < macroPath.length - 1; i++) {
-    const d = distanceToSegment(pos, macroPath[i], macroPath[i + 1]);
-    if (d < minDistToCorridor) minDistToCorridor = d;
+    const p1 = macroPath[i];
+    const p2 = macroPath[i + 1];
+
+    // Proyección punto a segmento
+    const l2 = (p1.x - p2.x) ** 2 + (p1.z - p2.z) ** 2;
+    let t = 0;
+    if (l2 > 0) {
+      t = ((pos.x - p1.x) * (p2.x - p1.x) + (pos.z - p1.z) * (p2.z - p1.z)) / l2;
+      t = Math.max(0, Math.min(1, t));
+    }
+
+    const projX = p1.x + t * (p2.x - p1.x);
+    const projZ = p1.z + t * (p2.z - p1.z);
+
+    const deviation = Math.hypot(pos.x - projX, pos.z - projZ);
+
+    // Distancia restante desde la proyección hasta el final:
+    // 1. Distancia desde proyección hasta p2 (fin del segmento actual)
+    const distToP2 = Math.hypot(projX - p2.x, projZ - p2.z);
+
+    // 2. Distancia pre-calculada desde p2 hasta el Final (Goal)
+    const distFromP2ToEnd = macroDistances[i + 1];
+
+    const totalPathDist = distToP2 + distFromP2ToEnd;
+
+    // Costo Heurístico Combinado:
+    // Queremos minimizar (PathDist) + penalizar (Deviation)
+    // - PathDist: Indica progreso real hacia la meta.
+    // - Deviation * 6.0: Fuerte incentivo para mantenerse en el carril.
+    const h = totalPathDist + deviation * 6.0;
+
+    if (h < minTotalDist) {
+      minTotalDist = h;
+    }
   }
 
-  // Penalización: Si te alejas del corredor, aumenta el costo.
-  // Factor 2.5: Fuerte atracción hacia la carretera principal.
-  return h_euclidean + minDistToCorridor * 2.5;
+  // Fallback: Si por alguna razón el cálculo falla o da algo absurdo, usamos Euclidian.
+  // Pero normalmente minTotalDist será la mejor estimación "guiada".
+  return minTotalDist;
 };
 
 // MAURI: Función Principal del Buscador de Caminos (A*)
@@ -141,9 +176,25 @@ export async function findPathAsync(
   const STEERING_COST = config.steering_cost || 20.0;
   const GEAR_SWITCH_COST = config.gear_switch_cost || 150.0;
 
+  // --- PRE-CALCULO DE DISTANCIAS MACRO ---
+  // Generamos un array donde macroDistances[i] es la distancia acumulada desde el nodo i hasta el final.
+  let macroDistances = null;
+  if (macroPath && macroPath.length > 0) {
+    macroDistances = new Array(macroPath.length).fill(0);
+    // El último nodo (meta) tiene distancia 0 a sí mismo.
+    // Vamos de atrás hacia adelante.
+    for (let i = macroPath.length - 2; i >= 0; i--) {
+      const p1 = macroPath[i];
+      const p2 = macroPath[i + 1];
+      const d = Math.hypot(p1.x - p2.x, p1.z - p2.z);
+      macroDistances[i] = d + macroDistances[i + 1];
+    }
+    // console.log("Macro Distances Calculated:", macroDistances);
+  }
+
   // H Inicial con MacroPath
   const openSet = [
-    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal, macroPath)),
+    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal, macroPath, macroDistances)),
   ];
   const closedSet = new Map();
   const explored = [];
@@ -191,11 +242,12 @@ export async function findPathAsync(
     const nextMoves = [];
 
     // 1. Lógica de Avance (d: 1)
+    // 1. Lógica de Avance (d: 1)
     if (curr.direction === -1) {
       // CAMBIO DE MARCHA: Si venía de atrás, para ir adelante...
       nextMoves.push({ d: 1, s: 0 }); // Opción 1: Salir recto
-      // MAURI FIX: Opción 2: Salir con la misma curva (Retracing) - Permite "V" suaves
-      if (curr.steer !== 0) nextMoves.push({ d: 1, s: curr.steer });
+      // MAURI FIX: Desactivado para evitar ángulos bruscos. Forzamos salida recta.
+      // if (curr.steer !== 0) nextMoves.push({ d: 1, s: curr.steer });
     } else {
       // CONTINUIDAD: Si ya venía de adelante, usa TODOS los pasos definidos
       for (const s of STEER_STEPS) {
@@ -207,8 +259,8 @@ export async function findPathAsync(
     if (curr.direction === 1) {
       // CAMBIO DE MARCHA: Si venía de adelante, para ir atrás...
       nextMoves.push({ d: -1, s: 0 }); // Opción 1: Salir recto
-      // MAURI FIX: Opción 2: Salir con la misma curva (Retracing)
-      if (curr.steer !== 0) nextMoves.push({ d: -1, s: curr.steer });
+      // MAURI FIX: Desactivado para evitar ángulos bruscos.
+      // if (curr.steer !== 0) nextMoves.push({ d: -1, s: curr.steer });
     } else {
       // CONTINUIDAD: Si ya venía de atrás, usa TODOS los pasos definidos
       for (const s of STEER_STEPS) {
@@ -259,7 +311,7 @@ export async function findPathAsync(
           nextZ,
           nextTheta,
           nextG + dirChangeCost,
-          heuristic({ x: nextX, z: nextZ }, goal, macroPath), // <--- Pasamos MacroPath
+          heuristic({ x: nextX, z: nextZ }, goal, macroPath, macroDistances), // <--- Pasamos MacroPath y Distances
           curr,
           s,
           d,

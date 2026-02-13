@@ -5,16 +5,17 @@ import { PathManager } from "./PathManager";
 // Importamos la versión ASYNC del buscador para no congelar la pantalla
 import { findPathAsync } from "../../utils/pathfinding";
 
+// Importamos herramientas del Grafo Topológico
+import { buildTopology } from "../../utils/graphBuilder";
+import { findMacroPath, findNearestGraphNode } from "../../utils/topologyPathfinder";
+
 export function EditorToolbar() {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
-  const [showPaths, setShowPaths] = useState(false); // Estado para PathManager
+  const [showPaths, setShowPaths] = useState(false);
   const [showDestinations, setShowDestinations] = useState(false);
-  const [showSettings, setShowSettings] = useState(false); // MAURI: Estado para menú de configuración
+  const [showSettings, setShowSettings] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
-  // ... (omitting lines for brevity in prompt, but in tool call I must be precise or use multiple chunks)
-  // I will use multi_replace to be safe and cleaner.
-
 
   // Acciones y estado del Store
   const selectedTool = useStore((state) => state.selectedTool);
@@ -26,6 +27,10 @@ export function EditorToolbar() {
   const setAutonomous = useStore((state) => state.setAutonomous);
   const setTargetDestination = useStore((state) => state.setTargetDestination);
   const setTestConfig = useStore((state) => state.setTestConfig);
+  // Store navigation graph
+  const navGraph = useStore((state) => state.navGraph);
+  const setNavGraph = useStore((state) => state.setNavGraph);
+  const setActiveMacroPath = useStore((state) => state.setActiveMacroPath);
 
   // --- RECORDING STATE ---
   const isRecording = useStore((state) => state.isRecording);
@@ -34,22 +39,18 @@ export function EditorToolbar() {
   const savedPaths = useStore((state) => state.savedPaths);
   const loadRecordedPath = useStore((state) => state.loadRecordedPath);
   const deleteRecordedPath = useStore((state) => state.deleteRecordedPath);
-  const saveCurrentPath = useStore((state) => state.saveCurrentPath); // Added for save button
-  const currentPath = useStore((state) => state.currentPath); // Added for save button visibility
+  const saveCurrentPath = useStore((state) => state.saveCurrentPath);
+  const currentPath = useStore((state) => state.currentPath);
 
   // Submenú de construcciones
   const [showConstruction, setShowConstruction] = useState(false);
 
   // Submenú de Itinerarios (Derecha)
   const [showItineraries, setShowItineraries] = useState(false);
-  const [itinerary, setItinerary] = useState([]); // Array of keys
+  const [itinerary, setItinerary] = useState([]);
 
-  // MAURI: Helper to ensure exclusive submenu opening
+  // Helper to ensure exclusive submenu opening
   const toggleSubmenu = (menuName) => {
-    // Close all first, but if we are clicking the one already open, toggle it (close it)
-    // Actually simpler: if active, close. If inactive, open and close others.
-
-    // States to manage: Construction, Destinations, Itineraries, Settings
     const states = {
       construction: [showConstruction, setShowConstruction],
       destinations: [showDestinations, setShowDestinations],
@@ -59,7 +60,6 @@ export function EditorToolbar() {
 
     const [currentVal, setLimit] = states[menuName];
 
-    // If opening, close others
     if (!currentVal) {
       Object.keys(states).forEach(key => {
         if (key !== menuName) states[key][1](false);
@@ -68,7 +68,6 @@ export function EditorToolbar() {
     setLimit(!currentVal);
   };
 
-  // Tools definitions
   const constructionTools = [
     { id: "road", label: "🛣️ Camino (Arrastrar)", color: "#333" },
     { id: "parking", label: "🅿️ Estacionamiento (Arrastrar)", color: "#8d6e63" },
@@ -84,8 +83,31 @@ export function EditorToolbar() {
     { id: "eraser", label: "🧽 Borrar", color: "#999" },
   ];
 
+  // MAURI: Helper para obtener/construir el grafo
+  const getOrBuildGraph = () => {
+    // Si ya existe y no queremos reconstruir siempre, podríamos devolver navGraph.
+    // Pero como el usuario edita el mapa, mejor reconstruir para asegurar frescura.
+    const graph = buildTopology(gridData, GRID_SIZE);
+
+    // IMPORTANTE: Actualizar el store para que el Visualizador vea EL MISMO grafo
+    // Usamos setTimeout para no bloquear el render actual si esto se llama durante un evento
+    setTimeout(() => setNavGraph(graph), 0);
+
+    return graph;
+  };
+
+  // MAURI: Reaccionar a cambios en el mapa para mantener la visualización actualizada
+  // (Opcional, pero ayuda a que se vean los puntos rojos al editar)
+  React.useEffect(() => {
+    // Debounce para no quemar CPU mientras arrastra
+    const timer = setTimeout(() => {
+      const graph = buildTopology(gridData, GRID_SIZE);
+      setNavGraph(graph);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [gridData, GRID_SIZE, setNavGraph]);
+
   const handleAutoDrive = async (destKey) => {
-    // ... (Mismo código de antes)
     if (isCalculating) return;
     const dest = gridData[destKey];
     if (!dest) return;
@@ -95,31 +117,94 @@ export function EditorToolbar() {
 
     setExplored([]);
     setPath([]);
+    useStore.getState().setActiveMacroPath([]); // Clear previous macro path
     setIsCalculating(true);
 
+    // 1. Construir/Obtener Grafo Topológico
+    const graph = getOrBuildGraph();
+
+    // 2. Encontrar nodos de inicio y fin en el grafo
+    const startNode = findNearestGraphNode(graph, vehicleState.x, vehicleState.z);
+
+    // MAURI FIX: Resolver destino usando Nearest también, porque la simplificación cambia las claves
+    const endNode = findNearestGraphNode(graph, destX, destZ);
+
+
+    // MAURI: Logic change - Sequential Routing
+    // Instead of A* with Heuristic, we will do: Start -> Node1 -> Node2 ... -> Destination
+    let fullPath = [];
+    let fullExplored = [];
+
     try {
+      // 3. Calcular Macro Ruta (Dijkstra)
+      // Check if start/end are valid
+      if (!startNode || !endNode) {
+        console.error("Start or End node not found in graph", { startNode, endNode });
+        throw new Error("No se pudo conectar con el grafo de navegación (Nodos no encontrados).");
+      }
+
+      console.log(`[Editor] Planning Macro: ${startNode.id} -> ${endNode.id}`);
+      console.log(`[Editor] StartNode Neighbors:`, startNode.neighbors);
+      console.log(`[Editor] EndNode Neighbors:`, endNode.neighbors);
+
+      const macroPathIds = findMacroPath(graph, startNode.id, endNode.id);
+
+      if (!macroPathIds) {
+        console.warn("❌ No macro route found. Fallback to direct A*.");
+        // Fallback: Direct simple A*
+        const result = await findPathAsync(
+          { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
+          { x: destX, z: destZ },
+          gridData,
+          GRID_SIZE,
+          useStore.getState().config,
+          (exploredNodes) => setExplored(exploredNodes)
+        );
+        if (result.path) {
+          setPath(result.path);
+          setExplored(result.explored);
+          setTargetDestination(dest);
+          setAutonomous(true);
+          setShowDestinations(false);
+        } else {
+          alert("No se encontró ruta.");
+        }
+        setIsCalculating(false);
+        return;
+      }
+
+      console.log("✅ Guided Route Plan:", macroPathIds);
+      useStore.getState().setActiveMacroPath(macroPathIds); // Visualizar pelotas verdes
+
+      // 4. Guided A* (Global Path with Heuristic Bias)
+      // Reconstruct coordinates for the heuristic
+      const macroPathCoords = macroPathIds.map(id => ({ x: graph[id].x, z: graph[id].z }));
+
+      const currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
+
+      // Execute Single A* run
       const result = await findPathAsync(
-        { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
-        { x: destX, z: destZ },
+        currentStart,
+        { x: destX, z: destZ }, // Target is the final destination
         gridData,
         GRID_SIZE,
-        useStore.getState().config, // MAURI: Pass config
-        (exploredNodes) => setExplored(exploredNodes)
+        useStore.getState().config,
+        (exploredNodes) => setExplored(exploredNodes),
+        macroPathCoords // <--- Passing the "Green Line" hint
       );
 
-      if (result.path) {
+      if (result.path && result.path.length > 0) {
         setPath(result.path);
         setExplored(result.explored);
         setTargetDestination(dest);
         setAutonomous(true);
-        // setOpen(false); // Mantener abierto para seguir operando si se quiere
-        setShowDestinations(false); // Cerrar panel de destinos al iniciar
+        setShowDestinations(false);
       } else {
-        setExplored(result.explored);
-        alert("Fallo en la navegación. Revisa obstáculos.");
+        alert("No se encontró ruta (A* falló incluso con guía).");
       }
     } catch (e) {
       console.error(e);
+      alert("Error en sistema de navegación.");
     } finally {
       setIsCalculating(false);
     }
@@ -131,13 +216,14 @@ export function EditorToolbar() {
     setExplored([]);
     setPath([]);
 
-    // Obtener estado inicial
     const { vehicleState } = useStore.getState();
-    // Simular posición de inicio para el encadenamiento
     let currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
 
     let fullPath = [];
     let fullExplored = [];
+
+    // Construir grafo una vez para todo el itinerario
+    const graph = getOrBuildGraph();
 
     try {
       for (let i = 0; i < itinerary.length; i++) {
@@ -147,15 +233,28 @@ export function EditorToolbar() {
 
         const [destX, destZ] = destKey.split(",").map(Number);
 
-        // Calcular tramo
+        // --- LÓGICA MACRO PARA CADA TRAMO ---
+        const startNode = findNearestGraphNode(graph, currentStart.x, currentStart.z);
+        const endNodeId = destKey;
+        let macroPathCoords = null;
+
+        if (startNode && graph[endNodeId]) {
+          const macroPathIds = findMacroPath(graph, startNode.id, endNodeId);
+          if (macroPathIds) {
+            setActiveMacroPath(macroPathIds);
+            macroPathCoords = macroPathIds.map(id => ({ x: graph[id].x, z: graph[id].z }));
+          }
+        }
+        // ------------------------------------
+
         const result = await findPathAsync(
           currentStart,
           { x: destX, z: destZ },
           gridData,
           GRID_SIZE,
-          useStore.getState().config, // MAURI: Pass config
-          // Solo mostramos explorados del tramo actual para no saturar, o podríamos acumular
-          (exploredNodes) => setExplored(exploredNodes)
+          useStore.getState().config,
+          (exploredNodes) => setExplored(exploredNodes),
+          macroPathCoords // <--- MAURI: Pasamos el Corredor
         );
 
         if (result.path && result.path.length > 0) {

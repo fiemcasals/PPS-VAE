@@ -1,4 +1,6 @@
 1. revisar porque si toco primero el acelerador y desp el joystick, el joystick queda pegado a la derecha, al reves no pasa
 2. poner las configuraciones de todas las variables junto a un reedme con una interfaz grafica
 3. aplicar un algoritmo tipo dijkstra entre los nodos
+4. IMPORTANTE: la camara frontal se mueve como si estuviera floja(testear)
+5. junto con las medidas que quiero poner por interfaz, quiero qtambien poder regular la altura de la camara en seguimiento
 
