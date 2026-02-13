@@ -4,6 +4,7 @@ import { useObjectDetection } from "../../hooks/useObjectDetection";
 
 export function DetectionsHUD() {
     const cameraMode = useStore((state) => state.cameraMode);
+    const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // MAURI: Global Toggle
     const detectionThresholds = useStore((state) => state.detectionThresholds);
     const canvasRef = useRef(null);
     const [sourceElement, setSourceElement] = useState(null);
@@ -22,7 +23,8 @@ export function DetectionsHUD() {
         findCanvas();
     }, []);
 
-    const isActive = cameraMode === "DRIVER" && !!sourceElement;
+    // MAURI: Active ONLY if enabled AND NOT in Driver mode (Front Camera disabled per request)
+    const isActive = isDetectionEnabled && cameraMode !== "DRIVER" && !!sourceElement;
     const { predictions, isLoading } = useObjectDetection(sourceElement, isActive, detectionThresholds.frontal);
 
     // Dibujar

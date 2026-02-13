@@ -7,7 +7,7 @@ import { findPathAsync } from "../../utils/pathfinding";
 
 // Importamos herramientas del Grafo Topológico
 import { buildTopology } from "../../utils/graphBuilder";
-import { findMacroPath, findNearestGraphNode } from "../../utils/topologyPathfinder";
+import { computeDualGradient, findNearestGraphNode } from "../../utils/topologyPathfinder";
 
 export function EditorToolbar() {
   const [open, setOpen] = useState(false);
@@ -20,6 +20,10 @@ export function EditorToolbar() {
   // Acciones y estado del Store
   const selectedTool = useStore((state) => state.selectedTool);
   const setTool = useStore((state) => state.setTool);
+  // MAURI: Missing hooks for detection toggle
+  const isDetectionEnabled = useStore((state) => state.isDetectionEnabled);
+  const setDetectionEnabled = useStore((state) => state.setDetectionEnabled);
+
   const gridData = useStore((state) => state.gridData);
   const GRID_SIZE = useStore((state) => state.GRID_SIZE);
   const setPath = useStore((state) => state.setPath);
@@ -85,8 +89,10 @@ export function EditorToolbar() {
 
   // MAURI: Helper para obtener/construir el grafo
   const getOrBuildGraph = () => {
-    // Si ya existe y no queremos reconstruir siempre, podríamos devolver navGraph.
-    // Pero como el usuario edita el mapa, mejor reconstruir para asegurar frescura.
+    // Si ya existe (cache), lo usamos para que los nodos NO se muevan al recalcular ruta.
+    if (navGraph) return navGraph;
+
+    // Si no existe, construimos uno nuevo.
     const graph = buildTopology(gridData, GRID_SIZE);
 
     // IMPORTANTE: Actualizar el store para que el Visualizador vea EL MISMO grafo
@@ -129,68 +135,77 @@ export function EditorToolbar() {
     // MAURI FIX: Resolver destino usando Nearest también, porque la simplificación cambia las claves
     const endNode = findNearestGraphNode(graph, destX, destZ);
 
-
     // MAURI: Logic change - Sequential Routing
     // Instead of A* with Heuristic, we will do: Start -> Node1 -> Node2 ... -> Destination
     let fullPath = [];
     let fullExplored = [];
 
     try {
-      // 3. Calcular Macro Ruta (Dijkstra)
-      // Check if start/end are valid
+      setExplored([]);
+
+      // 1. Identificar Nodos de Inicio y Fin en el Grafo
+      const startNode = findNearestGraphNode(graph, vehicleState.x, vehicleState.z);
+      // El EndNode lo sacamos directamente del ID del destino si es posible, o buscamos el más cercano
+      const endNode = findNearestGraphNode(graph, destX, destZ);
+
       if (!startNode || !endNode) {
-        console.error("Start or End node not found in graph", { startNode, endNode });
-        throw new Error("No se pudo conectar con el grafo de navegación (Nodos no encontrados).");
-      }
-
-      console.log(`[Editor] Planning Macro: ${startNode.id} -> ${endNode.id}`);
-      console.log(`[Editor] StartNode Neighbors:`, startNode.neighbors);
-      console.log(`[Editor] EndNode Neighbors:`, endNode.neighbors);
-
-      const macroPathIds = findMacroPath(graph, startNode.id, endNode.id);
-
-      if (!macroPathIds) {
-        console.warn("❌ No macro route found. Fallback to direct A*.");
-        // Fallback: Direct simple A*
-        const result = await findPathAsync(
-          { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
-          { x: destX, z: destZ },
-          gridData,
-          GRID_SIZE,
-          useStore.getState().config,
-          (exploredNodes) => setExplored(exploredNodes)
-        );
-        if (result.path) {
-          setPath(result.path);
-          setExplored(result.explored);
-          setTargetDestination(dest);
-          setAutonomous(true);
-          setShowDestinations(false);
-        } else {
-          alert("No se encontró ruta.");
-        }
+        alert("No se pudo conectar con la red vial (Grafo).");
         setIsCalculating(false);
         return;
       }
 
-      console.log("✅ Guided Route Plan:", macroPathIds);
-      useStore.getState().setActiveMacroPath(macroPathIds); // Visualizar pelotas verdes
+      console.log(`[Editor] Calculating Gradient Field from ${endNode.id}...`);
 
-      // 4. Guided A* (Global Path with Heuristic Bias)
-      // Reconstruct coordinates for the heuristic
-      const macroPathCoords = macroPathIds.map(id => ({ x: graph[id].x, z: graph[id].z }));
+      // 2. Calcular DOBLE GRADIENTE
+      // - startMap: Cosine (Visual) -> Distancia desde Origen
+      // - endMap: Heuristic (Nav) -> Distancia al Destino
+      const { startMap, endMap } = computeDualGradient(graph, startNode.id, endNode.id);
 
-      const currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
+      if (!endMap || endMap[startNode.id] === Infinity) {
+        alert("Destino inalcanzable (Isla desconectada).");
+        setIsCalculating(false);
+        return;
+      }
 
-      // Execute Single A* run
+      console.log(`[Editor] Gradient calculated.`);
+
+      // 3. COMBINAR GRADIENTES PONDERADOS
+      // Para generar una pendiente "cuesta abajo" hacia el destino:
+      // Weight(End) > Weight(Start).
+      // Costo = Start + (End * 2.5).
+      // - En camino óptimo: Start sube 1, End baja 1. Neto: Baja 1.5. (Pendiente suave).
+      // - En desvío/callejón: Start sube 1, End sube 1. Neto: Sube 3.5. (Pared vertical).
+      // Esto crea un "río" que fluye hacia el destino, con orillas muy empinadas.
+      const weightedMap = {};
+      Object.keys(graph).forEach(key => {
+        const s = startMap[key] || 0;
+        const e = endMap[key] || Infinity;
+        if (e === Infinity) {
+          weightedMap[key] = Infinity;
+        } else {
+          weightedMap[key] = s + (e * 2.5);
+        }
+      });
+
+      // Visualización: Pasar { start, end } para los textos pequeños, y usar weightedMap para lógica interna?
+      // No, activeGradient soporta { start, end, total: weightedMap } si lo modificamos.
+      // O simplemente pasamos { start, end } y dejamos que el visualizador calcule el total ponderado.
+      // Vamos a pasar `weightedMap` como 'total' explícito en un objeto extendido.
+      useStore.getState().setActiveGradient({
+        start: startMap,
+        end: endMap,
+        total: weightedMap
+      });
+
+      // 4. Ejecutar A* Guiado por COSTO PONDERADO (weightedMap)
       const result = await findPathAsync(
-        currentStart,
-        { x: destX, z: destZ }, // Target is the final destination
+        { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
+        { x: destX, z: destZ },
         gridData,
         GRID_SIZE,
         useStore.getState().config,
         (exploredNodes) => setExplored(exploredNodes),
-        macroPathCoords // <--- Passing the "Green Line" hint
+        { graph, gradientMap: weightedMap }
       );
 
       if (result.path && result.path.length > 0) {
@@ -199,6 +214,7 @@ export function EditorToolbar() {
         setTargetDestination(dest);
         setAutonomous(true);
         setShowDestinations(false);
+        setOpen(false); // MAURI: Close the tool menu automatically
       } else {
         alert("No se encontró ruta (A* falló incluso con guía).");
       }
@@ -373,6 +389,30 @@ export function EditorToolbar() {
               minWidth: "180px",
             }}
           >
+            {/* SECCIÓN DETECCIÓN (Solicitada dentro del Lápiz) */}
+            <button
+              onClick={() => {
+                setDetectionEnabled(!isDetectionEnabled);
+                // setOpen(false); // Mantener abierto para ver el cambio de color
+              }}
+              style={{
+                padding: "10px 20px",
+                border: "none",
+                cursor: "pointer",
+                background: "white",
+                color: isDetectionEnabled ? "green" : "grey",
+                fontWeight: "bold",
+                textAlign: "left",
+                borderBottom: "1px solid #eee",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px"
+              }}
+            >
+              <span style={{ fontSize: "1.2em" }}>👁️</span>
+              {isDetectionEnabled ? "Detección ON" : "Detección OFF"}
+            </button>
+
             {/* SECCIÓN GRABACIÓN */}
             <button
               onClick={() => {
@@ -928,6 +968,39 @@ function SettingsPanel({ onClose }) {
           🔑
         </button>
       </div>
+      {/* BOTÓN PERMANENTE DE DETECCIÓN (TOP RIGHT) */}
+      <div
+        style={{
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          zIndex: 2000,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: "10px"
+        }}
+      >
+        <button
+          onClick={() => setDetectionEnabled(!isDetectionEnabled)}
+          style={{
+            padding: "10px 20px",
+            cursor: "pointer",
+            background: isDetectionEnabled ? "rgba(0, 255, 0, 0.7)" : "rgba(100, 100, 100, 0.7)",
+            color: "white",
+            border: "2px solid white",
+            borderRadius: "20px",
+            fontWeight: "bold",
+            fontSize: "16px",
+            boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+            backdropFilter: "blur(5px)",
+            transition: "all 0.3s ease"
+          }}
+        >
+          {isDetectionEnabled ? "👁️ Detección ON" : "👁️ Detección OFF"}
+        </button>
+      </div>
+
     </div>
   );
 }

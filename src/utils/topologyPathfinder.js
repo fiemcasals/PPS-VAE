@@ -1,90 +1,69 @@
 /**
  * topologyPathfinder.js
  * 
- * Algoritmo Dijkstra de Alto Nivel para navegar el Grafo Topológico.
- * Encuentra la secuencia de nodos (Intersecciones/Destinos) óptima.
+ * Calcula CAMPOS DE GRADIENTE (Dijkstra) sobre el grafo topológico.
  */
 
-export const findMacroPath = (graph, startNodeId, endNodeId) => {
-    // Verificación básica
-    if (!graph[startNodeId] || !graph[endNodeId]) {
-        console.warn("[TopoPath] Nodos de inicio o fin no existen en el grafo.");
-        return null;
-    }
+// Helper: Run Dijkstra from a source node
+const runDijkstra = (graph, startNodeId) => {
+    const costs = {};
+    const pq = new Set();
 
-    // Estructuras para Dijkstra
-    const distances = {};
-    const previous = {};
-    const pq = new Set(); // Simple Priority Queue (Set para iterar y buscar min)
-
-    // Inicialización
-    Object.keys(graph).forEach(nodeId => {
-        distances[nodeId] = Infinity;
-        pq.add(nodeId);
+    Object.keys(graph).forEach(id => {
+        costs[id] = Infinity;
+        pq.add(id);
     });
 
-    distances[startNodeId] = 0;
+    if (graph[startNodeId]) costs[startNodeId] = 0;
 
-    let visitedCount = 0;
-    console.log(`[Dijkstra] Start: ${startNodeId} -> End: ${endNodeId}. Nodes in graph: ${Object.keys(graph).length}`);
-
+    // console.time("DijkstraRun");
     while (pq.size > 0) {
-        // Buscar nodo con menor distancia
         let minNode = null;
         let minDist = Infinity;
-
-        for (const nodeId of pq) {
-            if (distances[nodeId] < minDist) {
-                minDist = distances[nodeId];
-                minNode = nodeId;
+        for (const id of pq) {
+            if (costs[id] < minDist) {
+                minDist = costs[id];
+                minNode = id;
             }
         }
 
-        if (minNode === null || minDist === Infinity) {
-            console.warn(`[Dijkstra] Broken path? Visited: ${visitedCount}. Remaining PQ: ${pq.size}. MinDist: ${minDist}`);
-            break;
-        }
-
-        if (minNode === endNodeId) {
-            console.log(`[Dijkstra] Target found! Distance: ${minDist}. Visited: ${visitedCount}`);
-            break;
-        }
-
+        if (!minNode || minDist === Infinity) break;
         pq.delete(minNode);
-        visitedCount++;
 
-        // Relajar vecinos
-        const neighbors = graph[minNode].neighbors;
-        // console.log(`[Dijkstra] Visiting ${minNode}, neighbors: ${neighbors.length}`);
-
-        for (const edge of neighbors) {
-            const alt = distances[minNode] + edge.dist;
-            if (alt < distances[edge.id]) {
-                distances[edge.id] = alt;
-                previous[edge.id] = minNode;
+        graph[minNode].neighbors.forEach(edge => {
+            const alt = costs[minNode] + edge.dist;
+            if (alt < costs[edge.id]) {
+                costs[edge.id] = alt;
             }
-        }
+        });
     }
-
-    // Reconstruir camino
-    const path = [];
-    let u = endNodeId;
-    if (previous[u] !== undefined || u === startNodeId) {
-        while (u !== undefined) {
-            path.unshift(u);
-            u = previous[u];
-        }
-    } else {
-        return null; // No hay ruta
-    }
-
-    return path; // Array de IDs ["x,z", "x,z", ...]
+    // console.timeEnd("DijkstraRun");
+    return costs;
 };
 
 /**
- * Función auxiliar para encontrar el Nodo del Grafo más cercano a una posición arbitraria (x, z).
- * Útil para enganchar al auto (que puede estar en mitad de calle) al grafo.
+ * Calculates two gradient fields:
+ * 1. From Start (Distance traveled from origin) -> For Visualization
+ * 2. To End (Distance remaining to goal) -> For Navigation Heuristic
  */
+export const computeDualGradient = (graph, startNodeId, endNodeId) => {
+    // console.time("DualGradient");
+
+    // 1. Cost from Start (For Visualization: 0 -> High)
+    const startMap = runDijkstra(graph, startNodeId);
+
+    // 2. Cost to End (For Navigation Heuristic: High -> 0)
+    // Runs Dijkstra backwards from Goal (assuming undirected graph for now, or reversed edges)
+    // Since edges are bidirectional or simple neighbors, this works.
+    const endMap = runDijkstra(graph, endNodeId);
+
+    // console.timeEnd("DualGradient");
+    return { startMap, endMap };
+};
+
+// Legacy alias to avoid breaking imports immediately, though we should update calls
+export const computeDijkstraGradient = (graph, endNodeId) => runDijkstra(graph, endNodeId);
+
 export const findNearestGraphNode = (graph, x, z) => {
     let closestNode = null;
     let minDist = Infinity;

@@ -38,7 +38,28 @@ export const buildTopology = (gridData, gridSize) => {
     const SEPARATION_SQ = SEPARATION_RADIUS ** 2;
 
     // Barajar carreteras para sampling aleatorio (Poisson-ish)
-    shuffleArray(roadCells);
+    // MAURI: Reemplazamos shuffle puro por un shuffle ponderado por "Centralidad".
+    // 1. Calculamos "Centralidad": Cuántos vecinos tiene que TAMBIÉN son carretera.
+    // Esto prioriza celdas en el centro de la calle (lejos de los bordes).
+    roadCells.forEach(cell => {
+        let centralityScore = 0;
+        // Kernel de 3x3 o 5x5 alrededor de la celda
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                if (dx === 0 && dz === 0) continue;
+                const nk = `${cell.x + dx * gridSize},${cell.z + dz * gridSize}`;
+                const neighbor = gridData[nk];
+                if (neighbor && (neighbor.type === 'road' || neighbor.type === 'destination')) {
+                    centralityScore++;
+                }
+            }
+        }
+        cell.score = centralityScore;
+    });
+
+    // 2. Ordenamos por Score Descendente (Los más centrales primero)
+    // Agregamos un poco de ruido aleatorio para que no sea siempre idéntico el grafo
+    roadCells.sort((a, b) => (b.score + Math.random()) - (a.score + Math.random()));
 
     roadCells.forEach(cell => {
         // Verificar distancia con nodos ya existentes
@@ -61,7 +82,10 @@ export const buildTopology = (gridData, gridSize) => {
 
     // 3. Conectar Nodos (Construir Aristas)
     // Para cada nodo, buscar otros nodos macro alcanzables dentro de un radio máximo.
-    const CONNECTION_RADIUS = gridSize * 8; // Debe ser mayor que SEPARATION_RADIUS (x2 aprox)
+    // MAURI: "Minimal Diameter": Reducimos el radio de conexión al mínimo posible
+    // para evitar saltos o conexiones diagonales.
+    // SEPARATION es 3. CONNECTION debe ser apenas un poco más (4.5) para tolerar jitter.
+    const CONNECTION_RADIUS = gridSize * 4.5;
 
     Object.values(macroNodes).forEach(node => {
         findNeighborsBFS(node, macroNodes, gridData, gridSize, CONNECTION_RADIUS);

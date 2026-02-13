@@ -5,8 +5,12 @@ export function ThresholdControl() {
     const cameraMode = useStore((state) => state.cameraMode);
     const thresholds = useStore((state) => state.detectionThresholds);
     const setThreshold = useStore((state) => state.setDetectionThreshold);
+    const isDetectionEnabled = useStore((state) => state.isDetectionEnabled);
 
-    if (cameraMode !== "DRIVER" && cameraMode !== "BIFOCAL") return null;
+    // MAURI: Solo mostrar si está habilitada la IA y NO estamos en modo Driver (frontal desactivada)
+    if (!isDetectionEnabled) return null;
+    if (cameraMode === "DRIVER") return null;
+    if (cameraMode !== "BIFOCAL" && cameraMode !== "DRIVER") return null; // Defensive
 
     const targetKey = cameraMode === "DRIVER" ? "frontal" : "bifocal";
     const value = thresholds[targetKey];

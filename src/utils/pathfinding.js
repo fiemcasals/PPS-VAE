@@ -105,57 +105,52 @@ const distanceToSegment = (p, v, w) => { //p es el punto, v el nodo verde grande
   );
 };
 
-// Heurística Aumentada: Remaining Path Distance + Deviation
-const heuristic = (pos, goal, macroPath, macroDistances) => {
+// MAURI: Gradient Heuristic
+// Usa el mapa de costos pre-calculado (Dijkstra) sobre los nodos rojos.
+// h(pos) = min ( dist(pos, RedNode) + CostToGoal(RedNode) )
+// Esto crea un campo de potencial suave que atrae al auto hacia la meta a través de la red vial.
+const heuristic = (pos, goal, macroContext) => {
   const h_euclidean = Math.hypot(pos.x - goal.x, pos.z - goal.z);
 
-  if (!macroPath || macroPath.length < 2 || !macroDistances) return h_euclidean;
+  if (!macroContext || !macroContext.gradientMap) return h_euclidean;
 
-  // Encontrar el segmento más cercano y calcular cuánto falta de camino desde ahí
-  let minTotalDist = Infinity;
-  let bestDeviation = Infinity;
+  const { graph, gradientMap } = macroContext;
+  let minCost = Infinity;
 
-  // Recorremos segmentos
-  for (let i = 0; i < macroPath.length - 1; i++) {
-    const p1 = macroPath[i];
-    const p2 = macroPath[i + 1];
+  // Optimización: Buscar solo nodos rojos cercanos.
+  // Como no tenemos índice espacial eficiente aquí, iteramos todos (N ~ 200-500 es aceptable en JS moderno).
+  // Si fuera muy lento, usaríamos un Grid Spatial Hash.
 
-    // Proyección punto a segmento
-    const l2 = (p1.x - p2.x) ** 2 + (p1.z - p2.z) ** 2;
-    let t = 0;
-    if (l2 > 0) {
-      t = ((pos.x - p1.x) * (p2.x - p1.x) + (pos.z - p1.z) * (p2.z - p1.z)) / l2;
-      t = Math.max(0, Math.min(1, t));
-    }
+  // Radius check optimization: Only consider nodes within 50m to avoid evaluating far-off paths?
+  // Actually, we want the ABSOLUTE best gradient. Use all.
 
-    const projX = p1.x + t * (p2.x - p1.x);
-    const projZ = p1.z + t * (p2.z - p1.z);
+  const nodes = Object.values(graph);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    // MAURI: Ahora 'gCost' es el COSTO TOTAL (Start + End) del nodo.
+    // Los nodos en el camino directo tendrán un valor MINIMO (aprox constante).
+    // Los nodos que se desvían tendrán un valor MAYOR.
+    const combinedCost = gradientMap[node.id];
 
-    const deviation = Math.hypot(pos.x - projX, pos.z - projZ);
+    // Si el nodo es inalcanzable (infinito) o su costo total es muy alto comparado con el mejor encontrado
+    if (combinedCost === Infinity || combinedCost > minCost) continue;
 
-    // Distancia restante desde la proyección hasta el final:
-    // 1. Distancia desde proyección hasta p2 (fin del segmento actual)
-    const distToP2 = Math.hypot(projX - p2.x, projZ - p2.z);
+    // Distancia física al nodo rojo
+    const d = Math.hypot(pos.x - node.x, pos.z - node.z);
 
-    // 2. Distancia pre-calculada desde p2 hasta el Final (Goal)
-    const distFromP2ToEnd = macroDistances[i + 1];
+    // Heurística: Costo de pasar por este nodo rojo.
+    // H = Costo_Total_De_Ruta_Por_Ahi + (Distancia_Nuestra_Al_Nodo * Factor)
+    // Factor de atracción 2.0 para priorizar cercanía.
+    const attractionFactor = 2.0;
+    const totalH = combinedCost + (d * attractionFactor);
 
-    const totalPathDist = distToP2 + distFromP2ToEnd;
-
-    // Costo Heurístico Combinado:
-    // Queremos minimizar (PathDist) + penalizar (Deviation)
-    // - PathDist: Indica progreso real hacia la meta.
-    // - Deviation * 6.0: Fuerte incentivo para mantenerse en el carril.
-    const h = totalPathDist + deviation * 6.0;
-
-    if (h < minTotalDist) {
-      minTotalDist = h;
+    if (totalH < minCost) {
+      minCost = totalH;
     }
   }
 
-  // Fallback: Si por alguna razón el cálculo falla o da algo absurdo, usamos Euclidian.
-  // Pero normalmente minTotalDist será la mejor estimación "guiada".
-  return minTotalDist;
+  // Fallback
+  return (minCost === Infinity) ? h_euclidean : minCost;
 };
 
 // MAURI: Función Principal del Buscador de Caminos (A*)
@@ -166,43 +161,26 @@ export async function findPathAsync(
   cellSize,
   config = {},
   onProgress,
-  macroPath = null // MAURI: Nuevo argumento
+  macroContext = null // { graph, gradientMap }
 ) {
-  // MAURI: Límite alto, pero con yield no congela la UI
   const DEBUG_ITER_LIMIT = 50000;
-
-  // Extracción de pesos configurables con defaults
+  // ... rest of config ...
   const BACKWARD_WEIGHT = config.backward_weight || 30.0;
   const STEERING_COST = config.steering_cost || 20.0;
   const GEAR_SWITCH_COST = config.gear_switch_cost || 150.0;
 
-  // --- PRE-CALCULO DE DISTANCIAS MACRO ---
-  // Generamos un array donde macroDistances[i] es la distancia acumulada desde el nodo i hasta el final.
-  let macroDistances = null;
-  if (macroPath && macroPath.length > 0) {
-    macroDistances = new Array(macroPath.length).fill(0);
-    // El último nodo (meta) tiene distancia 0 a sí mismo.
-    // Vamos de atrás hacia adelante.
-    for (let i = macroPath.length - 2; i >= 0; i--) {
-      const p1 = macroPath[i];
-      const p2 = macroPath[i + 1];
-      const d = Math.hypot(p1.x - p2.x, p1.z - p2.z);
-      macroDistances[i] = d + macroDistances[i + 1];
-    }
-    // console.log("Macro Distances Calculated:", macroDistances);
-  }
-
-  // H Inicial con MacroPath
+  // Initialize
   const openSet = [
-    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal, macroPath, macroDistances)),
+    new Node(start.x, start.z, start.heading, 0, heuristic(start, goal, macroContext)),
   ];
+  // ... rest of init ...
   const closedSet = new Map();
   const explored = [];
 
   for (let iter = 0; iter < DEBUG_ITER_LIMIT; iter++) {
-    // MAURI: YIELD cada 500 iteraciones para pintar puntos rojos
+    // ... yield logic ...
     if (iter % 500 === 0) {
-      if (onProgress) onProgress([...explored]); // Copia para React
+      if (onProgress) onProgress([...explored]);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
@@ -211,8 +189,11 @@ export async function findPathAsync(
       break;
     }
 
+    // Simple sort for Priority Queue (JS array is fast enough for small sets, otherwise MinHeap)
     openSet.sort((a, b) => a.f - b.f);
     const curr = openSet.shift();
+
+    // ... standard A* logic follows ...
 
     const stateKey = `${Math.round(curr.x)},${Math.round(curr.z)},${Math.round(curr.theta / ANGLE_RES)}`;
     if (closedSet.has(stateKey) && closedSet.get(stateKey) <= curr.g) continue;
@@ -311,7 +292,7 @@ export async function findPathAsync(
           nextZ,
           nextTheta,
           nextG + dirChangeCost,
-          heuristic({ x: nextX, z: nextZ }, goal, macroPath, macroDistances), // <--- Pasamos MacroPath y Distances
+          heuristic({ x: nextX, z: nextZ }, goal, macroContext), // <--- Updated to use macroContext
           curr,
           s,
           d,

@@ -16,6 +16,8 @@ export const useStore = create((set) => ({
   cameraMode: "FOLLOW",
   telemetry: { speed: 0, position: [0, 0, 0], acceleration: 0 },
   detectionThresholds: { frontal: 0.15, bifocal: 0.5 },
+  isDetectionEnabled: false, // MAURI: Global toggle for object detection
+  setDetectionEnabled: (value) => set({ isDetectionEnabled: value }),
   setDetectionThreshold: (camera, value) =>
     set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
 
@@ -27,9 +29,11 @@ export const useStore = create((set) => ({
   explored: [], // Nodos explorados por A*
   navGraph: null, // Grafo Topológico
   navGraph: null, // Grafo Topológico
-  activeMacroPath: null, // Ruta macro actual para visualización
+  activeMacroPath: null, // Ruta macro actual para visualización (Legacy)
+  activeGradient: {}, // MAURI: Mapa de calor (Dijkstra Costs) para visualización
   setNavGraph: (graph) => set({ navGraph: graph }),
   setActiveMacroPath: (path) => set({ activeMacroPath: path }),
+  setActiveGradient: (gradient) => set({ activeGradient: gradient }),
 
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
   config: {
@@ -90,6 +94,7 @@ export const useStore = create((set) => ({
   savedPaths: {}, // Persistencia en memoria (nombre -> path[])
 
   // --- ACCIONES DE EDICIÓN ---
+  // --- ACCIONES DE EDICIÓN ---
   setTool: (tool) => set({ selectedTool: tool }),
   setGridObject: (x, z, type, metadata = {}) =>
     set((state) => {
@@ -100,7 +105,7 @@ export const useStore = create((set) => ({
       } else {
         newGridData[key] = { type, ...metadata };
       }
-      return { gridData: newGridData };
+      return { gridData: newGridData, navGraph: null }; // MAURI: Clear graph to force rebuild
     }),
   addBuilding: (building) =>
     set((state) => ({ buildings: [...state.buildings, building] })),
@@ -108,8 +113,8 @@ export const useStore = create((set) => ({
   removeBuilding: (id) =>
     set((state) => ({ buildings: state.buildings.filter(b => b.id !== id) })),
 
-  clearMap: () => set({ gridData: {}, buildings: [], currentPath: [], exploredNodes: [] }),
-  loadGridData: (data) => set({ gridData: data }),
+  clearMap: () => set({ gridData: {}, buildings: [], currentPath: [], exploredNodes: [], navGraph: null }),
+  loadGridData: (data) => set({ gridData: data, navGraph: null }),
   loadBuildings: (data) => set({ buildings: data }),
 
   // --- ACCIONES DE VEHÍCULO ---

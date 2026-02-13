@@ -1,7 +1,7 @@
 import { useStore } from "../store/useStore";
 import { findPathAsync } from "./pathfinding";
 import { buildTopology } from "./graphBuilder";
-import { findMacroPath, findNearestGraphNode } from "./topologyPathfinder";
+import { computeDualGradient, findNearestGraphNode } from "./topologyPathfinder";
 
 /**
  * Función encargada de iniciar un nuevo tramo de prueba aleatoria.
@@ -43,28 +43,41 @@ export const startNextTestLeg = async () => {
     // 4. Obtener posición actual del vehículo
     const currentVacc = state.vehicleState;
 
-    // --- MACRO-RUTA (DIJKSTRA) ---
-    let macroPath = null;
-    // Limpiar ruta anterior visualmente
-    setActiveMacroPath([]);
+    // --- GRADIENTE TOPOLÓGICO (DIJKSTRA) ---
+    let macroContext = null;
+
+    // Limpiar visualización anterior
+    if (state.setActiveGradient) state.setActiveGradient({});
 
     if (currentGraph) {
         const startGraphNode = findNearestGraphNode(currentGraph, currentVacc.x, currentVacc.z);
         const endGraphNode = findNearestGraphNode(currentGraph, destX, destZ);
 
         if (startGraphNode && endGraphNode) {
-            console.log(`[TEST] Macro-Ruta: ${startGraphNode.id} -> ${endGraphNode.id}`);
-            const pathIds = findMacroPath(currentGraph, startGraphNode.id, endGraphNode.id);
+            console.log(`[TEST] Calculando Gradiente: ${startGraphNode.id} -> ${endGraphNode.id}`);
 
-            if (pathIds) {
-                console.log("[TEST] Secuencia de Nodos:", pathIds);
-                // VISUALIZACIÓN: Actualizar Store
-                setActiveMacroPath(pathIds);
+            // Calcular Doble Gradiente
+            try {
+                const { startMap, endMap } = computeDualGradient(currentGraph, startGraphNode.id, endGraphNode.id);
 
-                // Convertir IDs a objetos nodo reales
-                macroPath = pathIds.map(id => currentGraph[id]);
-            } else {
-                console.warn("[TEST] No se encontró ruta en el grafo (posiblemente inconexos).");
+                if (endMap && endMap[startGraphNode.id] !== Infinity) {
+                    console.log("[TEST] Gradiente calculado con éxito.");
+
+                    // Visualizar: StartMap (Distancia desde origen)
+                    if (state.setActiveGradient) {
+                        state.setActiveGradient(startMap);
+                    }
+
+                    // Contexto para A*: EndMap (Distancia al destino)
+                    macroContext = {
+                        graph: currentGraph,
+                        gradientMap: endMap
+                    };
+                } else {
+                    console.warn("[TEST] No se encontró ruta en el grafo (posiblemente inconexos).");
+                }
+            } catch (err) {
+                console.error("[TEST] Error calculando gradiente:", err);
             }
         }
     }
@@ -78,7 +91,7 @@ export const startNextTestLeg = async () => {
             GRID_SIZE,
             config,
             (exploredNodes) => setExplored(exploredNodes),
-            macroPath // <--- Pasamos la ruta topológica como guía
+            macroContext // <--- Pasamos el contexto de gradiente
         );
 
         // 6. Procesar Resultado

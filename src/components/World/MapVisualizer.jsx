@@ -1,5 +1,5 @@
 import { useStore } from "../../store/useStore";
-import { Line } from "@react-three/drei"; // Importar Line para dibujar conexiones
+import { Line, Text } from "@react-three/drei"; // Importar Line y Text
 
 export function MapVisualizer() {
   const gridData = useStore((state) => state.gridData);
@@ -8,6 +8,7 @@ export function MapVisualizer() {
   // MAURI: Obtener el grafo para visualizarlo
   const navGraph = useStore((state) => state.navGraph);
   const activeMacroPath = useStore((state) => state.activeMacroPath);
+  const activeGradient = useStore((state) => state.activeGradient); // MAURI: Gradient Data
   const exploredNodes = useStore((state) => state.exploredNodes);
 
   // DEBUG: Check if we are receiving the path
@@ -35,18 +36,91 @@ export function MapVisualizer() {
 
         return (
           <group key={node.id}>
-            {/* Nodo (Esfera) */}
-            <mesh position={[node.x, 3, node.z]}>
-              <sphereGeometry args={[isTrace ? 1.2 : 0.8, 16, 16]} />
-              <meshStandardMaterial
-                // MAURI: User requests:
-                // - General Nodes (Intersections): RED
-                // - Active Path Nodes: BLUE
-                color={isTrace ? "#0000ff" : "#ff0000"}
-                emissive={isTrace ? "#000055" : "#550000"}
-                emissiveIntensity={0.5}
-              />
-            </mesh>
+            {/* Nodo (Disco 2D con Texto) */}
+            {/* Nodo (Disco 2D con Texto) */}
+            <group position={[node.x, 0.25, node.z]}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[1.5, 64]} />
+                <meshBasicMaterial
+                  color="#ff0000"
+                  transparent
+                  opacity={0.8}
+                  depthWrite={false} // Evita problemas de z-sorting con el texto o suelo
+                />
+              </mesh>
+
+              {/* Textos de Costes (Start, End, Total) */}
+              {(() => {
+                if (!activeGradient) return null;
+
+                // Extraer valores con soporte para estructura dual o simple (legacy)
+                let valStart = Infinity;
+                let valEnd = Infinity;
+
+                if (activeGradient.start && activeGradient.end) {
+                  valStart = activeGradient.start[node.id];
+                  valEnd = activeGradient.end[node.id];
+                } else if (typeof activeGradient[node.id] === 'number') {
+                  // Fallback si llega mapa simple
+                  valStart = activeGradient[node.id];
+                }
+
+                if (valStart === undefined || valStart === Infinity) return null;
+
+                // Si valEnd es infinito, solo mostramos Start (puede ser mapa simple)
+                const showDual = (valEnd !== undefined && valEnd !== Infinity);
+
+                // Si existe 'total' precalculado (WeightedMap), usalo.
+                // Si no, suma simple (Start + End).
+                const valTotal = (activeGradient.total && activeGradient.total[node.id])
+                  ? activeGradient.total[node.id]
+                  : (showDual ? (valStart + valEnd) : valStart);
+
+                return (
+                  <group position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+
+                    {/* TOTAL (Centro, Grande, Blanco) */}
+                    <Text
+                      position={[0, 0.4, 0]}
+                      fontSize={1.2}
+                      color="white"
+                      anchorX="center"
+                      anchorY="middle"
+                      outlineWidth={0.05}
+                      outlineColor="black"
+                    >
+                      {isFinite(valTotal) ? Math.round(valTotal) : "-"}
+                    </Text>
+
+                    {showDual && (
+                      <>
+                        {/* START (Abajo Izq, Verde) -> ORIGEN */}
+                        <Text
+                          position={[-0.7, -0.6, 0]}
+                          fontSize={0.6}
+                          color="#a5d6a7"
+                          anchorX="center"
+                          anchorY="middle"
+                        >
+                          O:{Math.round(valStart)}
+                        </Text>
+
+                        {/* END (Abajo Der, Amarillo) -> DESTINO */}
+                        <Text
+                          position={[0.7, -0.6, 0]}
+                          fontSize={0.6}
+                          color="#fff59d"
+                          anchorX="center"
+                          anchorY="middle"
+                        >
+                          D:{isFinite(valEnd) ? Math.round(valEnd) : "INF"}
+                        </Text>
+                      </>
+                    )}
+                  </group>
+                );
+              })()}
+            </group>
 
             {/* Conexiones (Líneas) */}
             {node.neighbors.map((neighbor) => {
