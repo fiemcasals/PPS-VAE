@@ -279,7 +279,7 @@ export async function findPathAsync(
       const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
       const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
 
-      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.9))
+      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.95))
         continue;
 
       // MAURI: "Tunnel Vision Config"
@@ -362,9 +362,9 @@ function smoothPath(path, gridData, cellSize) {
         curr.z * weightCurrent +
         next.z * weightNeighbors;
 
-      // --- COLISIÓN SUAVIZADO (0.6) ---
-      // Permitimos cortar margen para hacer curva
-      if (!isCollision(newX, newZ, curr.theta || 0, gridData, cellSize, 0.6)) {
+      // --- COLISIÓN SUAVIZADO (0.9) ---
+      // Permitimos cortar margen para hacer curva pero NO tanto (antes 0.6 -> muy arriesgado)
+      if (!isCollision(newX, newZ, curr.theta || 0, gridData, cellSize, 0.9)) {
         smoothed[i].x = newX;
         smoothed[i].z = newZ;
       }

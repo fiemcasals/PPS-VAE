@@ -162,21 +162,38 @@ export function AutonomousController() {
 
     // MAURI: Dynamic Lookahead Configurable
     // Base toma del store (default 2.0). 
-    // + 0.5m por cada m/s de velocidad. Max 6.0m.
-    const userLookahead = config.lookahead_distance || 2.0;
+    // + 1.0m por cada m/s de velocidad. Max 12.0m.
+    const userLookahead = config.lookahead_distance || 3.5;
 
-    let dynamicLookahead = userLookahead + Math.abs(vehicleState.speed) * 0.5;
-    if (dynamicLookahead > 6.0) dynamicLookahead = 6.0;
+    let dynamicLookahead = userLookahead + Math.abs(vehicleState.speed) * 1.0;
+    if (dynamicLookahead > 12.0) dynamicLookahead = 12.0;
 
     let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
 
-    // Si estamos empezando, miramos más cerca para no saltarnos curvas cerradas iniciales
-    // (Solo si el usuario no ha puesto un lookahead muy pequeño ya de por sí)
-    if (currentIndex.current < 5 && userLookahead > 1.5) {
-      LOOKAHEAD_DIST = 1.5;
-    } else if (currentIndex.current < 5) {
-      LOOKAHEAD_DIST = userLookahead;
+    // MAURI: ADAPTIVE LOOKAHEAD FOR CURVES
+    // If we are turning (angleError is high), simple lookahead cuts the corner (off-roading).
+    // We need to look closer to the vehicle to track the curve tightly.
+    // However, we can't use 'angleError' yet because it depends on the target... strictly speaking.
+    // But we can use the 'curveAhead' logic calculated later, or calculate a quick heading check here.
+
+    // Quick check for local curvature:
+    // Compare heading of current path segment vs segment 5m ahead.
+    if (currentPath.length > currentIndex.current + 3) {
+      const pCurrent = currentPath[currentIndex.current];
+      const pAhead = currentPath[Math.min(currentIndex.current + 5, currentPath.length - 1)];
+      // Vector del tramo actual
+      // const dx1 = ... (We assume vehicle heading aligns with path roughly or use previous node)
+
+      // Simple heuristic: If the vehicle is already turning (steering active is high) -> Reduce Lookahead
+      // Or if the map tells us there is a high steer value.
+
+      // Mejor aproximación: Si el 'steer' del punto actual o siguientes es alto.
+      // O si el ángulo al punto 'lejos' (dynamicLookahead) es muy distinto al heading actual.
     }
+
+    // Simplification: We will modulate LOOKAHEAD based on the angle calculated in the PREVIOUS frame 
+    // or calculate a candidate angle now. To keep it simple/stateless in this hook:
+    // We iterate. finding a point at dynamicLookahead, check angle. If angle > threshold, reduce lookahead.
 
     // 1. Inicializamos el índice de "búsqueda hacia adelante" en la posición actual del auto.
     let lookaheadIndex = currentIndex.current;
@@ -186,17 +203,12 @@ export function AutonomousController() {
 
     // Recorremos la ruta hacia adelante para encontrar el punto que está a la distancia LOOKAHEAD
     // MAURI FIX: Si el tramo es corto (maniobra), nos limitamos a buscar HASTA el cambio de dirección.
-    // Si no encontramos un punto a LOOKAHEAD_DIST antes del cambio, apuntamos al ÚLTIMO punto del tramo.
     let foundLookahead = false;
 
     for (let i = currentIndex.current; i < currentPath.length; i++) {
-      // DETECCIÓN DE CAMBIO DE TRAMO
       if (currentPath[i].direction !== currentDir) {
-        // Llegamos al final del tramo actual sin encontrar un punto lejano.
-        // Para no quedar "ciegos" o mirando al pasado, apuntamos al FINAL EXACTO del tramo.
-        // Esto obliga al auto a alinearse con el eje hasta el último centímetro.
         lookaheadIndex = Math.max(currentIndex.current, i - 1);
-        foundLookahead = true; // Forzamos flag para no seguir buscando
+        foundLookahead = true;
         break;
       }
 
@@ -206,11 +218,34 @@ export function AutonomousController() {
       if (d >= LOOKAHEAD_DIST) {
         lookaheadIndex = i;
         foundLookahead = true;
+
+        // --- CURVE CORRECTION ---
+        // Check angle to this candidate target
+        const dx = p.x - vehicleState.x;
+        const dz = p.z - vehicleState.z;
+        const angleToTarget = Math.atan2(dx, dz);
+        let angleDiff = angleToTarget - vehicleState.heading;
+        if (currentDir === -1) angleDiff -= Math.PI; // Adjust for reverse if needed (simplified)
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+        // MAURI: STRICTOR CURVE DETECTION
+        // Bajamos el umbral a 0.15 rads (~8.5 grados). Cualquier desviación mínima se trata como curva.
+        // Si detectamos curva, forzamos un Lookahead MUY CORTO (1.5m) para obligar al auto a pasar por los puntos.
+        if (Math.abs(angleDiff) > 0.15) {
+          // Si el lookahead actual es lejano, forzamos uno corto y reiniciamos búsqueda.
+          if (LOOKAHEAD_DIST > 1.5) {
+            LOOKAHEAD_DIST = 1.5; // Lookahead corto ("objetivo intermedio cercano")
+
+            // Reset search from start with new distance
+            i = currentIndex.current;
+            continue;
+          }
+        }
+
         break;
       }
 
-      // Si no cumple distancia, seguimos avanzando el índice candidato
-      // (Por defecto apuntamos a lo más lejos posible dentro del tramo)
       lookaheadIndex = i;
     }
 
@@ -271,21 +306,24 @@ export function AutonomousController() {
     while (angleError > Math.PI) angleError -= 2 * Math.PI;
     while (angleError < -Math.PI) angleError += 2 * Math.PI;
 
-    // Log aleatorio para monitorear sin saturar la consola
-    if (Math.random() < 0.05) {
-      console.log(`AutoCtrl: Idx=${currentIndex.current} Dir=${desiredDir}...`);
-    }
-
     // --- CONTROL DEL VOLANTE (Steering) ---
-    // MAURI: En reversa (effectiveDir === -1) aumentamos la ganancia para corregir agresivamente (-6.0)
-    // En avance también subimos a (-5.0) para evitar que vaya "flotando" paralelo a la línea.
+    // MAURI: Dynamic Steering Gain (Kp)
+    // Reduce sensitivity at higher speeds to prevent oscillation ("volantazos").
 
-    // Configurable Kp (Sensitivity) - Default 2.5 (Antes 5.0 era muy brusco)
+    // Configurable Kp (Sensitivity) - Default 2.5
     const userKp = config.steering_kp || 2.5;
 
-    // Usamos el Kp configurado (negativo)
-    // Si es reversa, le damos un 20% extra de "picante" porque es más inestable
-    const Kp = effectiveDir === -1 ? -(userKp * 1.2) : -userKp;
+    // Calculate Dynamic Gain based on speed
+    // Speed 0-2 m/s: Full Gain (2.5)
+    // Speed >5 m/s: Reduced Gain (1.0)
+    let speedFactor = Math.max(0, (Math.abs(vehicleState.speed) - 2.0) / 3.0); // 0 at 2m/s, 1 at 5m/s
+    speedFactor = Math.min(1.0, speedFactor); // Clamp at 1.0
+
+    let dynamicKp = userKp * (1.0 - 0.6 * speedFactor); // Scales down to 40% of userKp at high speed
+
+    // Usamos el Kp dinámico (negativo)
+    // En reversa mantenemos alta ganancia xq es inestable por naturaleza y lenta
+    const Kp = effectiveDir === -1 ? -(userKp * 1.2) : -dynamicKp;
 
     const maxSteer = 0.8; // Límite físico del volante
     let newSteer = angleError * Kp;
@@ -315,7 +353,6 @@ export function AutonomousController() {
       minThrottle + (baseThrottle - minThrottle) * throttleFactor;
 
     // Si el error es muy grande, entramos en modo "maniobra lenta"
-    //math.abs convierte cualquier numero en positivo ej |-5| = 5
     if (Math.abs(angleError) > maxTurnError) {
       if (Math.abs(vehicleState.speed) < 0.2) {
         newThrottle = 0.25; // Impulso para empezar a mover las ruedas
@@ -329,7 +366,7 @@ export function AutonomousController() {
     let distToManeuver = 999;
     for (let i = currentIndex.current; i < Math.min(currentIndex.current + 20, currentPath.length); i++) {
       if (i > currentIndex.current && currentPath[i].direction !== currentPath[i - 1].direction) {
-        // Distancia aproximada (suma de segmentos sería mejor, pero hipotenusa directa sirve si está cerca)
+        // Distancia aproximada
         const p = currentPath[i];
         distToManeuver = Math.hypot(p.x - vehicleState.x, p.z - vehicleState.z);
         break;
@@ -338,25 +375,31 @@ export function AutonomousController() {
 
     // --- MAURI: PREDICTIVE BRAKING (Detección de Curvas Futuras) ---
     // Miramos "n" nodos hacia adelante para ver si viene una curva fuerte.
-    // Si detectamos cambio de dirección o giro, desaceleramos ANTES de llegar.
+    // Detección basada en cambio de heading real entre puntos futuros
     let curveAhead = false;
-    const lookAheadCount = 10; // MAURI: Miramos más lejos (aprox 20m) para anticipar antes
+    const lookAheadCount = 15; // Increased lookahead count
 
-    for (let i = currentIndex.current; i < Math.min(currentIndex.current + lookAheadCount, currentPath.length); i++) {
-      const p = currentPath[i];
-      // Si hay un nodo con steering alto (curva cerrada) o cambio de marcha
-      // MAURI: Subimos umbral a 0.5 (antes 0.25) para que NO detecte curvas por 'steer' (que el A* genera ruidoso).
-      // Esto hace que se comporte como la ruta grabada (que tiene steer=0), confiando en la reactividad del angleError.
-      if (Math.abs(p.steer) > 0.5 || (i > currentIndex.current && p.direction !== currentPath[i - 1].direction)) {
-        curveAhead = true;
-        break;
-      }
+    // Analizamos la geometría: Heading actual vs Heading futuro
+    const pCurrent = currentPath[currentIndex.current];
+    const pFutureIndex = Math.min(currentIndex.current + 5, currentPath.length - 1);
+    const pFuture = currentPath[pFutureIndex];
+
+    // Check local curvature (steer command derivative) or geometry
+    // Checking change in direction between current motion vector and future path vector
+    let futureHeading = 0;
+    if (pFutureIndex > currentIndex.current) {
+      futureHeading = Math.atan2(pFuture.x - pCurrent.x, pFuture.z - pCurrent.z);
+    }
+
+    // Simple heuristic: If angleError is already significant, OR if future points deviate
+    if (Math.abs(angleError) > 0.3) {
+      curveAhead = true;
     }
 
     if (curveAhead) {
       // MAURI: SMOOTH SPEED LIMITER
-      // En vez de frenar a cero si pasamos de 1.0, definimos un límite y modulamos.
-      const targetSpeedLimit = 2.5; // MAURI: Subimos de 1.0 a 2.5 para que fluya
+      // Curvas cerradas: Límite 1.5 m/s
+      const targetSpeedLimit = 1.5;
 
       if (vehicleState.speed > targetSpeedLimit + 0.5) {
         // Si nos pasamos mucho (+0.5 m/s), FRENADO ACTIVO.
@@ -366,9 +409,7 @@ export function AutonomousController() {
         newThrottle = 0;
       } else {
         // Si estamos abajo del límite, ya no forzamos 0.15 (muy lento).
-        // Dejamos que el throttle calculado (que ya considera angleError) actúe, 
-        // pero lo capamos un poco (60%) por seguridad.
-        newThrottle = Math.min(newThrottle, 0.6); // ------si zigzague se baja la vel----
+        newThrottle = Math.min(newThrottle, 0.5); // Cap throttle to 50%
       }
     }
 
@@ -377,7 +418,7 @@ export function AutonomousController() {
       const approachFactor = Math.max(0.1, distToManeuver / 8.0); // De 1.0 bajando a 0.1
       newThrottle = newThrottle * approachFactor;
 
-      // Asegurar un mínimo de tracción para no quedarnos cortos (0.05 es muy poco, 0.08 asegura movimiento lento)
+      // Asegurar un mínimo de tracción para no quedarnos cortos
       if (newThrottle < 0.08) newThrottle = 0.08;
     }
 
