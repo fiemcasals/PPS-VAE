@@ -63,15 +63,31 @@ export const startNextTestLeg = async () => {
                 if (endMap && endMap[startGraphNode.id] !== Infinity) {
                     console.log("[TEST] Gradiente calculado con éxito.");
 
-                    // Visualizar: StartMap (Distancia desde origen)
+                    // 3. COMBINAR GRADIENTES PONDERADOS (Igual que EditorToolbar)
+                    const weightedMap = {};
+                    Object.keys(currentGraph).forEach(key => {
+                        const s = startMap[key] || 0;
+                        const e = endMap[key] || Infinity;
+                        if (e === Infinity) {
+                            weightedMap[key] = Infinity;
+                        } else {
+                            weightedMap[key] = s + (e * 2.5);
+                        }
+                    });
+
+                    // Visualizar: Pasar estructura completa { start, end, total }
                     if (state.setActiveGradient) {
-                        state.setActiveGradient(startMap);
+                        state.setActiveGradient({
+                            start: startMap,
+                            end: endMap,
+                            total: weightedMap
+                        });
                     }
 
-                    // Contexto para A*: EndMap (Distancia al destino)
+                    // Contexto para A*: WeightedMap (Costo Ponderado Decreciente)
                     macroContext = {
                         graph: currentGraph,
-                        gradientMap: endMap
+                        gradientMap: weightedMap
                     };
                 } else {
                     console.warn("[TEST] No se encontró ruta en el grafo (posiblemente inconexos).");
