@@ -10,6 +10,21 @@ export const useStore = create((set) => ({
   cantidad_celdas: CANTIDAD_CELDAS,
   GRID_SIZE: GRID_SIZE,
 
+  // --- IMPORTANCIA AL MACRO GRAPH ---
+  GRADIENT_WEIGHT: 5.0,
+
+  // ---IMPORTANCIA DE DISTANCIA EN HEURÍSTICA---
+  BASE_HEURISTIC_WEIGHT: 10.0, //un valor base que se toma para sacar el peso de varias cosas, la original era la distancia al destino
+
+  // --- CANTIDAD DE ITERACIONES PARA ENCONTRAR EL CAMINO ---
+  DEBUG_ITER_LIMIT: 50000,
+
+  // --- CONFIGURACIONES ... ---
+
+  BACKWARD_WEIGHT: 200.0, //se le pasa el peso de ir marcha atras
+  STEERING_COST: 20.0, // se le pasa el peso de girar
+  GEAR_SWITCH_COST: 50.0, //se le pasa el peso de cambiar de marcha (Drive <-> Reverse)
+
   // --- ESTADO DEL VEHÍCULO ---
   controls: { steering: 0, throttle: 0, direction: 1 },
   vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
@@ -22,7 +37,9 @@ export const useStore = create((set) => ({
 
   setDetectionEnabled: (value) => set({ isDetectionEnabled: value }),
   setDetectionThreshold: (camera, value) =>
-    set((state) => ({ detectionThresholds: { ...state.detectionThresholds, [camera]: value } })),
+    set((state) => ({
+      detectionThresholds: { ...state.detectionThresholds, [camera]: value },
+    })),
   setNearestHumanDistance: (dist) => set({ nearestHumanDistance: dist }),
   setSafetyWarningAck: (ack) => set({ safetyWarningAck: ack }),
 
@@ -46,11 +63,11 @@ export const useStore = create((set) => ({
     maneuver_threshold: 1,
     curve_threshold: 1.5,
     lookahead_distance: 2.0,
-    backward_weight: 100.0, // MAURI: Increased from 30.0 to 100.0 (Strong Penalty for Sustained Reverse)
+    backward_weight: 300.0, // MAURI: Increased from 30.0 to 100.0 (Strong Penalty for Sustained Reverse)
     steering_cost: 20.0,
     gear_switch_cost: 50.0,
     steering_kp: 5.0,
-    base_speed: 0.25 // MAURI: Reduced from 0.4 per user request (Anti-Derailing)
+    base_speed: 0.25, // MAURI: Reduced from 0.4 per user request (Anti-Derailing)
   }, // Valores por defecto
 
   fetchConfig: async () => {
@@ -116,9 +133,16 @@ export const useStore = create((set) => ({
     set((state) => ({ buildings: [...state.buildings, building] })),
 
   removeBuilding: (id) =>
-    set((state) => ({ buildings: state.buildings.filter(b => b.id !== id) })),
+    set((state) => ({ buildings: state.buildings.filter((b) => b.id !== id) })),
 
-  clearMap: () => set({ gridData: {}, buildings: [], currentPath: [], exploredNodes: [], navGraph: null }),
+  clearMap: () =>
+    set({
+      gridData: {},
+      buildings: [],
+      currentPath: [],
+      exploredNodes: [],
+      navGraph: null,
+    }),
   loadGridData: (data) => set({ gridData: data, navGraph: null }),
   loadBuildings: (data) => set({ buildings: data }),
 
@@ -145,7 +169,8 @@ export const useStore = create((set) => ({
     set((state) => ({ testConfig: { ...state.testConfig, ...config } })),
 
   // --- ACCIONES DE GRABACIÓN ---
-  setRecording: (active) => set({ isRecording: active, recordedPath: active ? [] : [] }),
+  setRecording: (active) =>
+    set({ isRecording: active, recordedPath: active ? [] : [] }),
   addRecordedPoint: (pt) =>
     set((state) => ({ recordedPath: [...state.recordedPath, pt] })),
 
@@ -153,7 +178,7 @@ export const useStore = create((set) => ({
     set((state) => ({
       savedPaths: { ...state.savedPaths, [name]: state.recordedPath },
       isRecording: false,
-      currentPath: state.recordedPath // Opcional: mostrar lo que acabamos de grabar
+      currentPath: state.recordedPath, // Opcional: mostrar lo que acabamos de grabar
     })),
 
   saveCurrentPath: (name) =>
@@ -162,7 +187,7 @@ export const useStore = create((set) => ({
       // Guardamos una copia profunda para evitar referencias
       const pathCopy = JSON.parse(JSON.stringify(state.currentPath));
       return {
-        savedPaths: { ...state.savedPaths, [name]: pathCopy }
+        savedPaths: { ...state.savedPaths, [name]: pathCopy },
       };
     }),
 
@@ -180,7 +205,9 @@ export const useStore = create((set) => ({
       let recHeading = 0;
       if (originalPath.length > 1) {
         // Buscamos un punto un poco más adelante para tener mejor vector
-        const pNext = originalPath.find(p => Math.hypot(p.x - p0.x, p.z - p0.z) > 0.1) || originalPath[1];
+        const pNext =
+          originalPath.find((p) => Math.hypot(p.x - p0.x, p.z - p0.z) > 0.1) ||
+          originalPath[1];
         recHeading = Math.atan2(pNext.x - p0.x, pNext.z - p0.z);
       }
 
@@ -192,7 +219,7 @@ export const useStore = create((set) => ({
       const sinT = Math.sin(deltaTheta);
 
       // 4. Transformar todos los puntos
-      const transformedPath = originalPath.map(p => {
+      const transformedPath = originalPath.map((p) => {
         // Trasladar al origen (relativo a p0)
         const relX = p.x - p0.x;
         const relZ = p.z - p0.z;
@@ -208,14 +235,14 @@ export const useStore = create((set) => ({
         return {
           ...p,
           x: rotX + curX,
-          z: rotZ + curZ
+          z: rotZ + curZ,
         };
       });
 
       return {
         currentPath: transformedPath,
         isAutonomous: true, // Arrancar automático inmediatamente
-        targetDestination: { name: `Grabación: ${name} (Relativa)` }
+        targetDestination: { name: `Grabación: ${name} (Relativa)` },
       };
     }),
 

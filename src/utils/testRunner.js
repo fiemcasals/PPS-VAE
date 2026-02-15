@@ -105,7 +105,6 @@ export const startNextTestLeg = async () => {
             { x: destX, z: destZ },
             gridData,
             GRID_SIZE,
-            config,
             (exploredNodes) => setExplored(exploredNodes),
             macroContext // <--- Pasamos el contexto de gradiente
         );

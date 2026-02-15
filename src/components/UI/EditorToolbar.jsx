@@ -203,7 +203,6 @@ export function EditorToolbar() {
         { x: destX, z: destZ },
         gridData,
         GRID_SIZE,
-        useStore.getState().config,
         (exploredNodes) => setExplored(exploredNodes),
         { graph, gradientMap: weightedMap }
       );
@@ -271,7 +270,6 @@ export function EditorToolbar() {
           { x: destX, z: destZ },
           gridData,
           GRID_SIZE,
-          useStore.getState().config,
           (exploredNodes) => setExplored(exploredNodes),
           macroPathCoords // <--- MAURI: Pasamos el Corredor
         );
@@ -674,7 +672,6 @@ export function EditorToolbar() {
                           { x: startPoint.x, z: startPoint.z }, // Ir al inicio de la grabación
                           gridData,
                           GRID_SIZE,
-                          useStore.getState().config, // MAURI: Pass config
                           (exploredNodes) => setExplored(exploredNodes)
                         );
 
