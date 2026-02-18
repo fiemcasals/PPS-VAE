@@ -835,6 +835,8 @@ export function EditorToolbar() {
 function SettingsPanel({ onClose }) {
   const config = useStore((state) => state.config);
   const saveConfig = useStore((state) => state.saveConfig);
+  const isDetectionEnabled = useStore((state) => state.isDetectionEnabled);
+  const setDetectionEnabled = useStore((state) => state.setDetectionEnabled);
   const [localConfig, setLocalConfig] = React.useState(config);
 
   // MAURI: Sync local state when store config changes (e.g. after fetchConfig)
@@ -946,8 +948,34 @@ function SettingsPanel({ onClose }) {
             <input type="number" step="0.5" name="steering_kp" value={localConfig.steering_kp || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
           </div>
           <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Velocidad Base:</label>
-            <input type="number" step="0.1" name="base_speed" value={localConfig.base_speed || 0.4} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+            <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+              <span>Velocidad Base:</span>
+              <span style={{ fontWeight: "bold", color: "#007bff" }}>{localConfig.base_speed?.toFixed(2)}</span>
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <span style={{ fontSize: "0.8em" }}>🐢</span>
+              <input
+                type="range"
+                min="0.1"
+                max="3.0"
+                step="0.1"
+                name="base_speed"
+                value={localConfig.base_speed || 0.4}
+                onChange={handleChange}
+                style={{ flex: 1, cursor: "pointer" }}
+              />
+              <span style={{ fontSize: "0.8em" }}>🐇</span>
+            </div>
+
+            {/* Input manual opcional */}
+            <input
+              type="number"
+              step="0.1"
+              name="base_speed"
+              value={localConfig.base_speed || 0.4}
+              onChange={handleChange}
+              style={{ width: "100%", marginTop: "5px", padding: "5px", border: "1px solid #ccc", borderRadius: "4px", textAlign: "center" }}
+            />
           </div>
         </div>
       )}
