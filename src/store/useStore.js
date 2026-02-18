@@ -10,20 +10,6 @@ export const useStore = create((set) => ({
   cantidad_celdas: CANTIDAD_CELDAS,
   GRID_SIZE: GRID_SIZE,
 
-  // --- IMPORTANCIA AL MACRO GRAPH ---
-  GRADIENT_WEIGHT: 5.0,
-
-  // ---IMPORTANCIA DE DISTANCIA EN HEURÍSTICA---
-  BASE_HEURISTIC_WEIGHT: 10.0, //un valor base que se toma para sacar el peso de varias cosas, la original era la distancia al destino
-
-  // --- CANTIDAD DE ITERACIONES PARA ENCONTRAR EL CAMINO ---
-  DEBUG_ITER_LIMIT: 50000,
-
-  // --- CONFIGURACIONES ... ---
-
-  BACKWARD_WEIGHT: 200.0, //se le pasa el peso de ir marcha atras
-  STEERING_COST: 20.0, // se le pasa el peso de girar
-  GEAR_SWITCH_COST: 50.0, //se le pasa el peso de cambiar de marcha (Drive <-> Reverse)
 
   // --- ESTADO DEL VEHÍCULO ---
   controls: { steering: 0, throttle: 0, direction: 1 },
@@ -50,7 +36,6 @@ export const useStore = create((set) => ({
   targetDestination: null,
   explored: [], // Nodos explorados por A*
   navGraph: null, // Grafo Topológico
-  navGraph: null, // Grafo Topológico
   activeMacroPath: null, // Ruta macro actual para visualización (Legacy)
   activeGradient: {}, // MAURI: Mapa de calor (Dijkstra Costs) para visualización
   setNavGraph: (graph) => set({ navGraph: graph }),
@@ -63,11 +48,14 @@ export const useStore = create((set) => ({
     maneuver_threshold: 1,
     curve_threshold: 1.5,
     lookahead_distance: 2.0,
-    backward_weight: 300.0, // MAURI: Increased from 30.0 to 100.0 (Strong Penalty for Sustained Reverse)
-    steering_cost: 20.0,
-    gear_switch_cost: 50.0,
+    backward_weight: 200.0, // Moved from root
+    steering_cost: 20.0, // Moved from root
+    gear_switch_cost: 50.0, // Moved from root
     steering_kp: 5.0,
-    base_speed: 0.25, // MAURI: Reduced from 0.4 per user request (Anti-Derailing)
+    base_speed: 0.4,
+    gradient_weight: 5.0, // Moved from root
+    base_heuristic_weight: 10.0, // Moved from root
+    debug_iter_limit: 50000, // Moved from root
   }, // Valores por defecto
 
   fetchConfig: async () => {

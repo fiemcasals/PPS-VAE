@@ -6,7 +6,8 @@ const STEER_STEPS = [-0.4, 0, 0.4]; // son el angulo maximo de giro, por los tre
 const STEP_SIZE = 2; //es el largo del paso
 
 //EXPORTO DE useStore para usarlo en el heurístico, para poder acceder al peso del gradiente dinámico.
-const { BASE_HEURISTIC_WEIGHT } = useStore.getState();
+const { config } = useStore.getState();
+const BASE_HEURISTIC_WEIGHT = config.base_heuristic_weight || 10.0;
 
 class Node {
   constructor(
@@ -142,9 +143,11 @@ const heuristic = (pos, goal, macroContext) => {
     const d = Math.hypot(pos.x - node.x, pos.z - node.z);
     if (d > 50) continue; // Si el nodo está a más de 50m, ignoralo y pasá al siguiente.
 
-    const { GRADIENT_WEIGHT } = useStore.getState();
+    const { config } = useStore.getState();
+    const GRADIENT_WEIGHT = config.gradient_weight || 5.0;
+    const BASE_HEURISTIC_WEIGHT_DYN = config.base_heuristic_weight || 10.0;
 
-    const totalH = combinedCost * GRADIENT_WEIGHT + d * BASE_HEURISTIC_WEIGHT; // Costo total: combinación del costo del gradiente y la distancia física al nodo rojo
+    const totalH = combinedCost * GRADIENT_WEIGHT + d * BASE_HEURISTIC_WEIGHT_DYN; // Costo total: combinación del costo del gradiente y la distancia física al nodo rojo
 
     if (totalH < minCost) {
       minCost = totalH;
@@ -163,10 +166,11 @@ export async function findPathAsync(
   onProgress, //es una funcion que se le pasa(en js se puede hacer), que se llama cada cierto numero de iteraciones para actualizar la visualizacion del proceso de busqueda, pasando una copia de la lista de nodos explorados hasta el momento.
   macroContext = null, // { graph, gradientMap }
 ) {
-  const { DEBUG_ITER_LIMIT } = useStore.getState();
-  const { BACKWARD_WEIGHT } = useStore.getState();
-  const { STEERING_COST } = useStore.getState();
-  const { GEAR_SWITCH_COST } = useStore.getState();
+  const { config } = useStore.getState();
+  const DEBUG_ITER_LIMIT = config.debug_iter_limit || 50000;
+  const BACKWARD_WEIGHT = config.backward_weight || 200.0;
+  const STEERING_COST = config.steering_cost || 20.0;
+  const GEAR_SWITCH_COST = config.gear_switch_cost || 50.0;
 
   // Initialize
   const openSet = [

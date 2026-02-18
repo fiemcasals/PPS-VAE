@@ -921,8 +921,21 @@ function SettingsPanel({ onClose }) {
       {activeGroup === "planner" && (
         <div style={{ paddingLeft: "5px" }}>
           <div>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Caminos (Gradient):</label>
+            <input type="number" step="1.0" name="gradient_weight" value={localConfig.gradient_weight || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Distancia (Heuristic):</label>
+            <input type="number" step="1.0" name="base_heuristic_weight" value={localConfig.base_heuristic_weight || 10.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px" }}>
+            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Límite Iteraciones:</label>
+            <input type="number" step="1000" name="debug_iter_limit" value={localConfig.debug_iter_limit || 50000} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+          </div>
+          <div style={{ marginTop: "8px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
+          <div style={{ marginTop: "8px" }}>
             <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Marcha Atrás:</label>
-            <input type="number" step="1.0" name="backward_weight" value={localConfig.backward_weight || 30.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+            <input type="number" step="1.0" name="backward_weight" value={localConfig.backward_weight || 200.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
           </div>
           <div style={{ marginTop: "8px" }}>
             <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
@@ -930,7 +943,7 @@ function SettingsPanel({ onClose }) {
           </div>
           <div style={{ marginTop: "8px" }}>
             <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Cambios (D/R):</label>
-            <input type="number" step="10.0" name="gear_switch_cost" value={localConfig.gear_switch_cost || 150.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+            <input type="number" step="10.0" name="gear_switch_cost" value={localConfig.gear_switch_cost || 50.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
           </div>
         </div>
       )}
