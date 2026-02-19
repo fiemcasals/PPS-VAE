@@ -9,6 +9,7 @@ import { PhysicsEngine } from "./components/Vehicle/Physics/PhysicsEngine";
 import { EditorToolbar } from "./components/UI/EditorToolbar";
 import { WebcamFeed } from "./components/UI/WebcamFeed"; // Importar Webcam
 import { DetectionsHUD } from "./components/UI/DetectionsHUD"; // Importar HUD Detecciones
+import { SafetyAlert } from "./components/UI/SafetyAlert"; // MAURI: Safety Modal
 import { MapVisualizer } from "./components/World/MapVisualizer";
 import { MapEditor } from "./components/World/MapEditor";
 import { AutonomousController } from "./components/Vehicle/AutonomousController";
@@ -29,6 +30,7 @@ function App() {
       {/* CAPA 1: EL HUD Y EL EDITOR (Capa 2D HTML) */}
       <WebcamFeed /> {/* Overlay de Cámara Física (BIFOCO) */}
       <DetectionsHUD /> {/* Overlay de Cámara Virtual (FRONTAL) */}
+      <SafetyAlert /> {/* Modal de Seguridad */}
       <HUD />
       <EditorToolbar />
 

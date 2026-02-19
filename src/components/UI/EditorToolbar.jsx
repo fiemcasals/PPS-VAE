@@ -253,14 +253,41 @@ export function EditorToolbar() {
 
         // --- LÓGICA MACRO PARA CADA TRAMO ---
         const startNode = findNearestGraphNode(graph, currentStart.x, currentStart.z);
-        const endNodeId = destKey;
-        let macroPathCoords = null;
+        // const endNodeId = destKey; // destKey might not be exact node ID if simplified graph
+        const endNode = findNearestGraphNode(graph, destX, destZ);
 
-        if (startNode && graph[endNodeId]) {
-          const macroPathIds = findMacroPath(graph, startNode.id, endNodeId);
-          if (macroPathIds) {
-            setActiveMacroPath(macroPathIds);
-            macroPathCoords = macroPathIds.map(id => ({ x: graph[id].x, z: graph[id].z }));
+        let weightedMap = null;
+
+        if (startNode && endNode) {
+          // MAURI: Use Dual Gradient (Same as handleAutoDrive)
+          const { startMap, endMap } = computeDualGradient(graph, startNode.id, endNode.id);
+
+          if (endMap && endMap[startNode.id] !== Infinity) {
+            weightedMap = {};
+            Object.keys(graph).forEach(key => {
+              const s = startMap[key] || 0;
+              const e = endMap[key] || Infinity;
+              if (e === Infinity) {
+                weightedMap[key] = Infinity;
+              } else {
+                weightedMap[key] = s + (e * 5.0); // Strong gradient
+              }
+            });
+
+            // Update Visualization for this leg (can overwrite previous)
+            useStore.getState().setActiveGradient({
+              start: startMap,
+              end: endMap,
+              total: weightedMap
+            });
+
+            // MAURI DEBUG
+            const wKeys = Object.keys(weightedMap);
+            if (wKeys.length > 0) {
+              console.log(`[Itinerary] WeightedMap Generated. Size: ${wKeys.length}. Sample: ${wKeys[0]} = ${weightedMap[wKeys[0]]}`);
+            } else {
+              console.warn("[Itinerary] WeightedMap is EMPTY!");
+            }
           }
         }
         // ------------------------------------
@@ -271,7 +298,7 @@ export function EditorToolbar() {
           gridData,
           GRID_SIZE,
           (exploredNodes) => setExplored(exploredNodes),
-          macroPathCoords // <--- MAURI: Pasamos el Corredor
+          { graph, gradientMap: weightedMap } // <--- MAURI: Pass correct context object
         );
 
         if (result.path && result.path.length > 0) {
@@ -831,6 +858,29 @@ export function EditorToolbar() {
   );
 }
 
+// Componente interno reutilizable para el header de grupo
+const GroupHeader = ({ id, label, icon, activeGroup, toggleGroup }) => (
+  <div
+    onClick={() => toggleGroup(id)}
+    style={{
+      margin: "5px 0",
+      borderBottom: "1px solid #eee",
+      fontSize: "0.85em",
+      color: activeGroup === id ? "#007bff" : "#555",
+      fontWeight: activeGroup === id ? "bold" : "normal",
+      cursor: "pointer",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: "5px 2px",
+      background: activeGroup === id ? "#f8f9fa" : "transparent"
+    }}
+  >
+    <span>{icon} {label}</span>
+    <span>{activeGroup === id ? "▶" : "▷"}</span>
+  </div>
+);
+
 // Componente interno para manejar el formulario de configuración
 function SettingsPanel({ onClose }) {
   const config = useStore((state) => state.config);
@@ -846,45 +896,38 @@ function SettingsPanel({ onClose }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setLocalConfig(prev => ({ ...prev, [name]: parseFloat(value) }));
+    // Allow empty string or intermediate states (like "0.")
+    setLocalConfig(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSave = () => {
-    saveConfig(localConfig);
+    // Parse values back to numbers before saving
+    const configToSave = {};
+    for (const key in localConfig) {
+      const val = localConfig[key];
+      // Keep booleans as is, parse strings to float if they are numbers
+      if (typeof val === 'boolean') {
+        configToSave[key] = val;
+      } else if (!isNaN(parseFloat(val))) {
+        configToSave[key] = parseFloat(val);
+      } else {
+        configToSave[key] = val;
+      }
+    }
+    saveConfig(configToSave);
     alert("Configuración guardada en Backend.");
   };
 
   // Accordion state: 'objectives' | 'planner' | 'pilot'
-  const [activeGroup, setActiveGroup] = useState("objectives");
+  const [activeGroup, setActiveGroup] = useState(null);
 
   const toggleGroup = (group) => {
     setActiveGroup(activeGroup === group ? null : group);
   };
 
-  const GroupHeader = ({ id, label, icon }) => (
-    <div
-      onClick={() => toggleGroup(id)}
-      style={{
-        margin: "5px 0",
-        borderBottom: "1px solid #eee",
-        fontSize: "0.85em",
-        color: activeGroup === id ? "#007bff" : "#555",
-        fontWeight: activeGroup === id ? "bold" : "normal",
-        cursor: "pointer",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "5px 2px",
-        background: activeGroup === id ? "#f8f9fa" : "transparent"
-      }}
-    >
-      <span>{icon} {label}</span>
-      <span>{activeGroup === id ? "▼" : "▶"}</span>
-    </div>
-  );
-
   return (
     <div style={{
+      position: "relative", // Needed for absolute positioning context
       background: "white",
       borderRadius: "8px",
       padding: "15px",
@@ -897,110 +940,21 @@ function SettingsPanel({ onClose }) {
     }}>
       <h4 style={{ margin: "0 0 10px 0", fontSize: "0.95em", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>⚙️ Configuración Auto</h4>
 
-      {/* GRUPO 1: GENERAL */}
-      <GroupHeader id="objectives" label="Objetivos" icon="🎯" />
-      {activeGroup === "objectives" && (
-        <div style={{ paddingLeft: "5px" }}>
-          <div>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
-            <input type="number" step="0.1" name="arrival_threshold" value={localConfig.arrival_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
-            <input type="number" step="0.1" name="maneuver_threshold" value={localConfig.maneuver_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Curva:</label>
-            <input type="number" step="0.1" name="curve_threshold" value={localConfig.curve_threshold || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-        </div>
-      )}
+      {/* Main List - Headers Only */}
+      <GroupHeader id="vehicle" label="Vehículo (Medidas)" icon="🚗" activeGroup={activeGroup} toggleGroup={toggleGroup} />
+      <GroupHeader id="objectives" label="Objetivos" icon="🎯" activeGroup={activeGroup} toggleGroup={toggleGroup} />
+      <GroupHeader id="planner" label="Planeador (A*)" icon="🧠" activeGroup={activeGroup} toggleGroup={toggleGroup} />
+      <GroupHeader id="pilot" label="Piloto Automático" icon="🏎️" activeGroup={activeGroup} toggleGroup={toggleGroup} />
+      <GroupHeader id="visualization" label="Visualización" icon="👁️" activeGroup={activeGroup} toggleGroup={toggleGroup} />
 
-      {/* GRUPO 2: PLANEADOR DE RUTAS (A*) */}
-      <GroupHeader id="planner" label="Planeador (A*)" icon="🧠" />
-      {activeGroup === "planner" && (
-        <div style={{ paddingLeft: "5px" }}>
-          <div>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Caminos (Gradient):</label>
-            <input type="number" step="1.0" name="gradient_weight" value={localConfig.gradient_weight || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Distancia (Heuristic):</label>
-            <input type="number" step="1.0" name="base_heuristic_weight" value={localConfig.base_heuristic_weight || 10.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Límite Iteraciones:</label>
-            <input type="number" step="1000" name="debug_iter_limit" value={localConfig.debug_iter_limit || 50000} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Marcha Atrás:</label>
-            <input type="number" step="1.0" name="backward_weight" value={localConfig.backward_weight || 200.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
-            <input type="number" step="1.0" name="steering_cost" value={localConfig.steering_cost || 20.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Cambios (D/R):</label>
-            <input type="number" step="10.0" name="gear_switch_cost" value={localConfig.gear_switch_cost || 50.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-        </div>
-      )}
-
-      {/* GRUPO 3: CONTROLADOR (PILOTO) */}
-      <GroupHeader id="pilot" label="Piloto Automático" icon="🏎️" />
-      {activeGroup === "pilot" && (
-        <div style={{ paddingLeft: "5px" }}>
-          <div>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Distancia Visión (Lookahead):</label>
-            <input type="number" step="0.1" name="lookahead_distance" value={localConfig.lookahead_distance || 2.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Sensibilidad Volante (Kp):</label>
-            <input type="number" step="0.5" name="steering_kp" value={localConfig.steering_kp || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-          </div>
-          <div style={{ marginTop: "8px" }}>
-            <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-              <span>Velocidad Base:</span>
-              <span style={{ fontWeight: "bold", color: "#007bff" }}>{localConfig.base_speed?.toFixed(2)}</span>
-            </label>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <span style={{ fontSize: "0.8em" }}>🐢</span>
-              <input
-                type="range"
-                min="0.1"
-                max="3.0"
-                step="0.1"
-                name="base_speed"
-                value={localConfig.base_speed || 0.4}
-                onChange={handleChange}
-                style={{ flex: 1, cursor: "pointer" }}
-              />
-              <span style={{ fontSize: "0.8em" }}>🐇</span>
-            </div>
-
-            {/* Input manual opcional */}
-            <input
-              type="number"
-              step="0.1"
-              name="base_speed"
-              value={localConfig.base_speed || 0.4}
-              onChange={handleChange}
-              style={{ width: "100%", marginTop: "5px", padding: "5px", border: "1px solid #ccc", borderRadius: "4px", textAlign: "center" }}
-            />
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: "5px", marginTop: "10px" }}>
+      {/* Footer Buttons (Always Visible in Main Panel) */}
+      <div style={{ display: "flex", gap: "5px", marginTop: "auto", paddingTop: "10px", borderTop: "1px solid #eee" }}>
         <button
           onClick={handleSave}
           style={{ flex: 1, padding: "8px", background: "#007bff", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
         >
           💾 Guardar
         </button>
-        {/* Opción para ir al Login Page del Backend si se desea */}
         <button
           onClick={() => window.open("http://localhost:8000/login/", "_blank")}
           style={{ padding: "8px", background: "#333", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
@@ -1009,6 +963,184 @@ function SettingsPanel({ onClose }) {
           🔑
         </button>
       </div>
+
+      {/* Side Panel - Content */}
+      {activeGroup && (
+        <div style={{
+          position: "absolute",
+          left: "100%", // Anchored to the right edge
+          top: 0,
+          marginLeft: "10px", // Spacing from main panel
+          background: "white",
+          padding: "15px",
+          borderRadius: "8px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
+          border: "1px solid #ddd",
+          width: "300px",
+          zIndex: 1000,
+          maxHeight: "80vh",
+          overflowY: "auto"
+        }}>
+          {/* GRUPO 0: VEHÍCULO */}
+          {activeGroup === "vehicle" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🚗 Vehículo</h5>
+              <div>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Ancho (m):</label>
+                <input type="number" step="0.1" name="vehicle_width" value={localConfig.vehicle_width || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Largo (m):</label>
+                <input type="number" step="0.1" name="vehicle_length" value={localConfig.vehicle_length || 3.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+            </div>
+          )}
+
+          {/* GRUPO 1: OBJETIVOS */}
+          {activeGroup === "objectives" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🎯 Objetivos</h5>
+              <div>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
+                <input type="number" step="0.1" name="arrival_threshold" value={localConfig.arrival_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
+                <input type="number" step="0.1" name="maneuver_threshold" value={localConfig.maneuver_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Curva:</label>
+                <input type="number" step="0.1" name="curve_threshold" value={localConfig.curve_threshold || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+            </div>
+          )}
+
+          {/* GRUPO 2: PLANEADOR */}
+          {activeGroup === "planner" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🧠 A* Planner</h5>
+              <div>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Caminos (Gradient):</label>
+                <input type="number" step="0.1" name="gradient_weight" value={localConfig.gradient_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Paso A* (Step Size):</label>
+                <input type="number" step="0.1" name="step_size" value={localConfig.step_size} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Distancia (Heuristic):</label>
+                <input type="number" step="0.1" name="base_heuristic_weight" value={localConfig.base_heuristic_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Límite Iteraciones:</label>
+                <input type="number" step="1000" name="debug_iter_limit" value={localConfig.debug_iter_limit} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Penalización Densidad (Exploration):</label>
+                <input type="number" step="0.1" name="density_weight" value={localConfig.density_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Marcha Atrás:</label>
+                <input type="number" step="0.1" name="backward_weight" value={localConfig.backward_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
+                <input type="number" step="0.1" name="steering_cost" value={localConfig.steering_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Brusquedad (Smoothness):</label>
+                <input type="number" step="0.1" name="steering_change_cost" value={localConfig.steering_change_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Cambios (D/R):</label>
+                <input type="number" step="0.1" name="gear_switch_cost" value={localConfig.gear_switch_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+            </div>
+          )}
+
+          {/* GRUPO 3: PILOTO */}
+          {activeGroup === "pilot" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🏎️ Piloto Automático</h5>
+              <div>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Distancia Visión (Lookahead):</label>
+                <input type="number" step="0.1" name="lookahead_distance" value={localConfig.lookahead_distance || 2.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Sensibilidad Volante (Kp):</label>
+                <input type="number" step="0.5" name="steering_kp" value={localConfig.steering_kp || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Velocidad Base:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{localConfig.base_speed?.toFixed(2)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.8em" }}>🐢</span>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="3.0"
+                    step="0.1"
+                    name="base_speed"
+                    value={localConfig.base_speed || 0.4}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.8em" }}>🐇</span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="base_speed"
+                  value={localConfig.base_speed || 0.4}
+                  onChange={handleChange}
+                  style={{ width: "100%", marginTop: "5px", padding: "5px", border: "1px solid #ccc", borderRadius: "4px", textAlign: "center" }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* GRUPO 4: VISUALIZACIÓN */}
+          {activeGroup === "visualization" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>👁️ Visualización</h5>
+              <div style={{ marginBottom: "8px", display: "flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  name="show_graph_debug"
+                  checked={localConfig.show_graph_debug !== false}
+                  onChange={(e) => setLocalConfig(prev => ({ ...prev, show_graph_debug: e.target.checked }))}
+                  style={{ transform: "scale(1.2)", marginRight: "8px" }}
+                />
+                <label style={{ fontSize: "0.85em" }}>Mostrar Nodos (Grafo)</label>
+              </div>
+              <div style={{ marginBottom: "8px", display: "flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  name="show_path_debug"
+                  checked={localConfig.show_path_debug !== false}
+                  onChange={(e) => setLocalConfig(prev => ({ ...prev, show_path_debug: e.target.checked }))}
+                  style={{ transform: "scale(1.2)", marginRight: "8px" }}
+                />
+                <label style={{ fontSize: "0.85em" }}>Mostrar Recorrido</label>
+              </div>
+              <div style={{ marginBottom: "8px", display: "flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  name="show_target_debug"
+                  checked={localConfig.show_target_debug !== false}
+                  onChange={(e) => setLocalConfig(prev => ({ ...prev, show_target_debug: e.target.checked }))}
+                  style={{ transform: "scale(1.2)", marginRight: "8px" }}
+                />
+                <label style={{ fontSize: "0.85em" }}>Mostrar Target (Bola Azul)</label>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* BOTÓN PERMANENTE DE DETECCIÓN (TOP RIGHT) */}
       <div
         style={{

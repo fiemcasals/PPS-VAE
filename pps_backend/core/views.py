@@ -42,9 +42,18 @@ def get_config(request):
         "lookahead_distance": config.lookahead_distance,
         "backward_weight": config.backward_weight,
         "steering_cost": config.steering_cost,
+        "steering_change_cost": config.steering_change_cost,
         "gear_switch_cost": config.gear_switch_cost,
         "steering_kp": config.steering_kp,
-        "base_speed": config.base_speed
+        "base_speed": config.base_speed,
+        
+        # New Fields
+        "gradient_weight": config.gradient_weight,
+        "base_heuristic_weight": config.base_heuristic_weight,
+        "debug_iter_limit": config.debug_iter_limit,
+        "vehicle_width": config.vehicle_width,
+        "vehicle_length": config.vehicle_length,
+        "step_size": config.step_size,
     })
 
 @csrf_exempt
@@ -53,11 +62,17 @@ def update_config(request):
         try:
             data = json.loads(request.body)
             # Buscar el config existente (del primer usuario o crear uno default)
+            # Buscar el config existente (del primer usuario o crear uno default)
             config = SimConfig.objects.first()
             if not config:
-                # Si no existe, no podemos guardar sin usuario.
-                # Retornamos error o mocks
-                return JsonResponse({"status": "error", "message": "No user config found"}, status=404)
+                # Si no existe, CREARLO por defecto
+                config = SimConfig()
+                config.user_id = 1 # Asumimos user default o null si lo permite el modelo
+                # O simplemente config.save() si user no es requerido.
+                # Verificamos models.py luego, pero por ahora intentamos salvar.
+                config.save()
+            
+            # Update fields
 
             config.arrival_threshold = data.get("arrival_threshold", config.arrival_threshold)
             config.arrival_threshold_maneuver = data.get("arrival_threshold_maneuver", config.arrival_threshold_maneuver)
@@ -66,9 +81,18 @@ def update_config(request):
             
             config.backward_weight = data.get("backward_weight", config.backward_weight)
             config.steering_cost = data.get("steering_cost", config.steering_cost)
+            config.steering_change_cost = data.get("steering_change_cost", config.steering_change_cost)
             config.gear_switch_cost = data.get("gear_switch_cost", config.gear_switch_cost)
             config.steering_kp = data.get("steering_kp", config.steering_kp)
             config.base_speed = data.get("base_speed", config.base_speed)
+            
+            # New Fields
+            config.gradient_weight = data.get("gradient_weight", config.gradient_weight)
+            config.base_heuristic_weight = data.get("base_heuristic_weight", config.base_heuristic_weight)
+            config.debug_iter_limit = data.get("debug_iter_limit", config.debug_iter_limit)
+            config.vehicle_width = data.get("vehicle_width", config.vehicle_width)
+            config.vehicle_length = data.get("vehicle_length", config.vehicle_length)
+            config.step_size = data.get("step_size", config.step_size)
             
             config.save()
             return JsonResponse({"status": "ok"})

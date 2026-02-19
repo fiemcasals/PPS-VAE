@@ -5,6 +5,8 @@ import { Line } from "@react-three/drei";
 export function PathVisualizer() {
   const currentPath = useStore((state) => state.currentPath) || [];
   const exploredNodes = useStore((state) => state.exploredNodes) || [];
+  const targetPoint = useStore((state) => state.targetPoint);
+  const config = useStore((state) => state.config);
 
   // Dividir el path en segmentos por dirección para colorearlos distinto
   const segments = useMemo(() => {
@@ -37,7 +39,7 @@ export function PathVisualizer() {
   return (
     <group>
       {/* Nodos explorados: Puntos rojos flotando un poco */}
-      {exploredNodes.length > 0 &&
+      {config.show_path_debug && exploredNodes.length > 0 &&
         exploredNodes.map(
           (n, i) =>
             i % 5 === 0 && ( // Dibujar 1 de cada 5 para no saturar
@@ -49,7 +51,7 @@ export function PathVisualizer() {
         )}
 
       {/* Segmentos del camino coloreados */}
-      {segments.map((seg, i) => (
+      {config.show_path_debug && segments.map((seg, i) => (
         <Line
           key={i}
           points={seg.points.map((p) => [p.x, 0.6, p.z])}
@@ -61,8 +63,8 @@ export function PathVisualizer() {
       ))}
 
       {/* Blue Dot: Target Point actual del controlador */}
-      {useStore((state) => state.targetPoint) && (
-        <mesh position={[useStore.getState().targetPoint.x, 1.0, useStore.getState().targetPoint.z]}>
+      {config.show_target_debug && targetPoint && (
+        <mesh position={[targetPoint.x, 1.0, targetPoint.z]}>
           <sphereGeometry args={[0.3, 8, 8]} />
           <meshBasicMaterial color="#0000ff" />
         </mesh>

@@ -10,6 +10,7 @@ export function MapVisualizer() {
   const activeMacroPath = useStore((state) => state.activeMacroPath);
   const activeGradient = useStore((state) => state.activeGradient); // MAURI: Gradient Data
   const exploredNodes = useStore((state) => state.exploredNodes);
+  const config = useStore((state) => state.config);
 
   // DEBUG: Check if we are receiving the path
   if (activeMacroPath && activeMacroPath.length > 0) {
@@ -26,7 +27,7 @@ export function MapVisualizer() {
 
 
       {/* 1. VISUALIZACIÓN DEL GRAFO TOPOLÓGICO (DEBUG) */}
-      {navGraph && Object.values(navGraph).map((node) => {
+      {config.show_graph_debug && navGraph && Object.values(navGraph).map((node) => {
         // MAURI: Check if this node is part of the ACTIVE MACRO PATH
         let isTrace = false;
         if (activeMacroPath && activeMacroPath.includes(node.id)) {

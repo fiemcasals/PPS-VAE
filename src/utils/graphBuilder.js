@@ -85,7 +85,8 @@ export const buildTopology = (gridData, gridSize) => {
     // MAURI: "Minimal Diameter": Reducimos el radio de conexión al mínimo posible
     // para evitar saltos o conexiones diagonales.
     // SEPARATION es 3. CONNECTION debe ser apenas un poco más (4.5) para tolerar jitter.
-    const CONNECTION_RADIUS = gridSize * 4.5;
+    // SEPARATION es 3. CONNECTION debe ser generoso para asegurar diagonales y evitar islas.
+    const CONNECTION_RADIUS = gridSize * 6.0;
 
     Object.values(macroNodes).forEach(node => {
         findNeighborsBFS(node, macroNodes, gridData, gridSize, CONNECTION_RADIUS);

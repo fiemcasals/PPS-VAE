@@ -21,15 +21,40 @@ export function WebcamFeed() {
         if (cameraMode === "BIFOCAL" || isDetectionEnabled) {
             const getWebcam = async () => {
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({
+                    // MAURI: Auto-detect ZED Camera
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(d => d.kind === "videoinput");
+                    console.log("[WebcamFeed] Available Cameras:", videoDevices);
+
+                    let selectedDeviceId = null;
+
+                    // 1. Search for "ZED" or "Stereo"
+                    const zedCamera = videoDevices.find(d =>
+                        d.label.toLowerCase().includes("zed") ||
+                        d.label.toLowerCase().includes("stereo")
+                    );
+
+                    if (zedCamera) {
+                        console.log("[WebcamFeed] ZED Camera Found:", zedCamera.label);
+                        selectedDeviceId = zedCamera.deviceId;
+                    } else if (videoDevices.length > 1) {
+                        // 2. Fallback: Use the LAST camera (often external USB)
+                        // Integrated cameras are usually first.
+                        const lastCamera = videoDevices[videoDevices.length - 1];
+                        console.log("[WebcamFeed] Using External Camera (Fallback):", lastCamera.label);
+                        selectedDeviceId = lastCamera.deviceId;
+                    }
+
+                    const constraints = {
                         video: {
-                            // Prefer rear-facing camera or high resolution if possible
-                            // facingMode: "environment", 
-                            width: { ideal: 1920 },
+                            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                            width: { ideal: 1920 }, // ZED likes HD
                             height: { ideal: 1080 }
                         },
                         audio: false,
-                    });
+                    };
+
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
 
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
@@ -38,7 +63,7 @@ export function WebcamFeed() {
                     setError(null);
                 } catch (err) {
                     console.error("Error accessing webcam:", err);
-                    setError("No se pudo acceder a la cámara. Asegúrate de dar permisos y conectar el dispositivo.");
+                    setError("No se pudo acceder a la cámara. Revisa permisos o conexión USB.");
                 }
             };
 

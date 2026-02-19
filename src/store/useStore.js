@@ -21,12 +21,46 @@ export const useStore = create((set) => ({
   nearestHumanDistance: Infinity, // MAURI: SAFETY SYSTEM - Nearest person distance
   safetyWarningAck: false, // MAURI: SAFETY SYSTEM - User acknowledged warning
 
+  // NEW: SAFETY STATUS (SAFE | CAUTION | DANGER)
+  safetyStatus: "SAFE",
+
+  updateSafetyStatus: (distance) => set((state) => {
+    let status = "SAFE";
+    if (distance < 2.0) status = "DANGER";
+    else if (distance < 5.0) status = "CAUTION";
+
+    // Auto-disable Autonomous Mode on DANGER
+    let isAutonomous = state.isAutonomous;
+    let controls = { ...state.controls };
+
+    if (status === "DANGER") {
+      isAutonomous = false;
+      controls.throttle = 0; // Emergency Stop
+    } else if (status === "CAUTION") {
+      // Limit max speed/throttle if needed (logic can be refined)
+      if (controls.throttle > 0.3) controls.throttle = 0.3;
+    }
+
+    return {
+      nearestHumanDistance: distance,
+      safetyStatus: status,
+      isAutonomous: isAutonomous,
+      controls: controls
+    };
+  }),
+
   setDetectionEnabled: (value) => set({ isDetectionEnabled: value }),
   setDetectionThreshold: (camera, value) =>
     set((state) => ({
       detectionThresholds: { ...state.detectionThresholds, [camera]: value },
     })),
-  setNearestHumanDistance: (dist) => set({ nearestHumanDistance: dist }),
+  // MAURI: SAFETY SYSTEM - Updated to trigger logic
+  setNearestHumanDistance: (dist) => {
+    // Proxy to new update logic
+    const update = useStore.getState().updateSafetyStatus;
+    if (update) update(dist);
+    else set({ nearestHumanDistance: dist }); // Fallback
+  },
   setSafetyWarningAck: (ack) => set({ safetyWarningAck: ack }),
 
   // --- ESTADO DE NAVEGACIÓN ---
@@ -49,13 +83,26 @@ export const useStore = create((set) => ({
     curve_threshold: 1.5,
     lookahead_distance: 2.0,
     backward_weight: 200.0, // Moved from root
-    steering_cost: 20.0, // Moved from root
-    gear_switch_cost: 50.0, // Moved from root
+    steering_cost: 5.0, // Reduced from 20.0 to fix exploration flood
+    gear_switch_cost: 15.0, // Reduced from 50.0 to encourage maneuvering
+    // Vehicle Dimensions (Sync with backend defaults)
+    vehicle_width: 1.5,
+    vehicle_length: 3.0,
+
+    // Controller Config
     steering_kp: 5.0,
     base_speed: 0.4,
-    gradient_weight: 5.0, // Moved from root
-    base_heuristic_weight: 10.0, // Moved from root
-    debug_iter_limit: 50000, // Moved from root
+
+    // Pathfinding / A* Config
+    gradient_weight: 5.0,
+    base_heuristic_weight: 50.0,
+    density_weight: 1.0, // MAURI: Exploration Penalty
+    debug_iter_limit: 50000,
+
+    // Visualización Debug
+    show_graph_debug: true,
+    show_path_debug: true,
+    show_target_debug: true,
   }, // Valores por defecto
 
   fetchConfig: async () => {
@@ -63,7 +110,8 @@ export const useStore = create((set) => ({
       const response = await fetch("http://localhost:8000/api/config/");
       if (response.ok) {
         const data = await response.json();
-        set({ config: data });
+        // Merge with existing config to preserve defaults for missing keys
+        set((state) => ({ config: { ...state.config, ...data } }));
         console.log("Config loaded from Backend:", data);
       }
     } catch (e) {
@@ -138,7 +186,16 @@ export const useStore = create((set) => ({
   setSteering: (val) =>
     set((state) => ({ controls: { ...state.controls, steering: val } })),
   setThrottle: (val) =>
-    set((state) => ({ controls: { ...state.controls, throttle: val } })),
+    set((state) => {
+      let newThrottle = val;
+      // SAFETY CHECK
+      if (state.safetyStatus === "DANGER") newThrottle = 0;
+      // CAUTION LIMIT
+      if (state.safetyStatus === "CAUTION" && newThrottle > 0.3) {
+        newThrottle = 0.3;
+      }
+      return { controls: { ...state.controls, throttle: newThrottle } };
+    }),
   setDirection: (val) =>
     set((state) => ({ controls: { ...state.controls, direction: val } })),
   setVehicleState: (newState) =>
@@ -148,7 +205,13 @@ export const useStore = create((set) => ({
   setCameraMode: (mode) => set({ cameraMode: mode }),
 
   // --- ACCIONES DE NAVEGACIÓN ---
-  setAutonomous: (isActive) => set({ isAutonomous: isActive }),
+  setAutonomous: (isActive) => set((state) => {
+    if (isActive && state.safetyStatus === "DANGER") {
+      console.warn("Cannot enable Autonomous Mode: SAFETY HAZARD");
+      return { isAutonomous: false }; // Block enablement
+    }
+    return { isAutonomous: isActive };
+  }),
   setPath: (path) => set({ currentPath: path }),
   setExplored: (nodes) => set({ exploredNodes: nodes }),
   setExplored: (nodes) => set({ exploredNodes: nodes }),

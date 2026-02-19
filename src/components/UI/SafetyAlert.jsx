@@ -2,62 +2,68 @@ import React, { useEffect } from "react";
 import { useStore } from "../../store/useStore";
 
 export function SafetyAlert() {
+    const safetyStatus = useStore((state) => state.safetyStatus);
     const nearestHumanDistance = useStore((state) => state.nearestHumanDistance);
-    const safetyWarningAck = useStore((state) => state.safetyWarningAck);
-    const setSafetyWarningAck = useStore((state) => state.setSafetyWarningAck);
+    const setAutonomous = useStore((state) => state.setAutonomous);
+    const setThrottle = useStore((state) => state.setThrottle);
 
-    // Auto-reset ACK when clear
-    useEffect(() => {
-        if (nearestHumanDistance > 5.0 && safetyWarningAck) {
-            setSafetyWarningAck(false);
-        }
-    }, [nearestHumanDistance, safetyWarningAck, setSafetyWarningAck]);
-
-    if (nearestHumanDistance > 5.0 || safetyWarningAck) return null;
-
-    const isStop = nearestHumanDistance < 1.0;
-    const color = isStop ? "red" : "orange";
-    const title = isStop ? "⛔ PARADA DE EMERGENCIA ⛔" : "⚠ PRECAUCIÓN - VELOCIDAD REDUCIDA ⚠";
-    const msg = isStop
-        ? "EL VEHÍCULO SE HA DETENIDO PORQUE SE DETECTÓ UNA PERSONA A MENOS DE 1 METRO."
-        : "EL VEHÍCULO CIRCULA LENTO PORQUE SE DETECTÓ UNA PERSONA CERCANA (1m - 5m).";
+    // If SAFE or CAUTION, we don't block the screen (CAUTION is handled by indicator in Telemetry)
+    // ONLY SHOW FULL SCREEN ALERT ON DANGER
+    if (safetyStatus !== "DANGER") return null;
 
     return (
         <div style={{
-            position: "fixed", // MAURI: Changed from absolute to fixed for global centering
-            top: "15%",
+            pointerEvents: "auto", // MAURI: Ensure clicks work even if parent has none
+            position: "fixed",
+            top: "50%",
             left: "50%",
-            transform: "translateX(-50%)",
-            backgroundColor: "rgba(0, 0, 0, 0.95)",
-            border: `6px solid ${color}`,
-            padding: "30px",
-            borderRadius: "15px",
-            zIndex: 99999, // MAURI: Max z-index
+            transform: "translate(-50%, -50%)",
+            backgroundColor: "rgba(255, 0, 0, 0.95)", // Strong Red
+            border: "6px solid white",
+            padding: "40px",
+            borderRadius: "20px",
+            zIndex: 99999,
             color: "white",
             textAlign: "center",
-            minWidth: "500px",
+            minWidth: "600px",
             boxShadow: "0 0 100px rgba(0,0,0,1)"
         }}>
-            <h2 style={{ color: color, marginTop: 0 }}>⚠️ {title} ⚠️</h2>
-            <p style={{ fontSize: "1.2rem", fontWeight: "bold" }}>{msg}</p>
-            <p>Distancia: {nearestHumanDistance.toFixed(2)}m</p>
+            <h1 style={{ fontSize: "3rem", margin: "0 0 20px 0" }}>⛔ PELIGRO DETECTADO ⛔</h1>
+            <p style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
+                PERSONA DETECTADA A MENOS DE 2 METROS
+            </p>
+            <p style={{ fontSize: "1.2rem" }}>
+                Distancia: {nearestHumanDistance.toFixed(2)}m
+            </p>
+            <p style={{ fontSize: "1.2rem", marginTop: "20px" }}>
+                EL VEHÍCULO SE HA DETENIDO Y EL MODO AUTÓNOMO ESTÁ BLOQUEADO.
+            </p>
 
-            <button
-                onClick={() => setSafetyWarningAck(true)}
-                style={{
-                    marginTop: "15px",
-                    padding: "10px 30px",
-                    fontSize: "1.2rem",
-                    backgroundColor: color,
-                    color: "black",
-                    border: "none",
-                    borderRadius: "5px",
-                    cursor: "pointer",
-                    fontWeight: "bold"
-                }}
-            >
-                ENTENDIDO
-            </button>
+            <div style={{ display: "flex", gap: "20px", justifyContent: "center", marginTop: "30px" }}>
+                <button
+                    onClick={() => {
+                        // Manual Override: User acknowledges, but system remains in DANGER state until person moves.
+                        // We can't really "dismiss" the danger if the person is there.
+                        // But maybe we allow switching to manual control?
+                        // For now, this button just acknowledges the modal, but if distance is < 2m, it will likely reappear or throttle remains 0.
+                        // Actually, let's make it a "FORCE MANUAL STOP" button just in case.
+                        setAutonomous(false);
+                        setThrottle(0);
+                    }}
+                    style={{
+                        padding: "15px 40px",
+                        fontSize: "1.5rem",
+                        backgroundColor: "white",
+                        color: "red",
+                        border: "none",
+                        borderRadius: "10px",
+                        cursor: "pointer",
+                        fontWeight: "bold"
+                    }}
+                >
+                    DETENER Y TOMAR CONTROL MANUAL
+                </button>
+            </div>
         </div>
     );
 }

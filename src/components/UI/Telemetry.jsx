@@ -3,6 +3,29 @@ import { useStore } from "../../store/useStore";
 import { VEHICLE_CONFIG } from "../Vehicle/Physics/vehicleConfig";
 import "./styles/Telemetry.css";
 
+const SafetyIndicator = () => {
+  const safetyStatus = useStore((state) => state.safetyStatus);
+
+  let color = "#00ff00"; // Green
+  if (safetyStatus === "CAUTION") color = "orange";
+  if (safetyStatus === "DANGER") color = "red";
+
+  return (
+    <div
+      title={`ESTADO SEGURIDAD: ${safetyStatus}`}
+      style={{
+        width: "15px",
+        height: "15px",
+        borderRadius: "50%",
+        backgroundColor: color,
+        boxShadow: `0 0 10px ${color}`,
+        border: "1px solid white",
+        transition: "all 0.3s ease"
+      }}
+    />
+  );
+};
+
 export const Telemetry = () => {
   // Suscripción a los datos del Store
   const { steering, throttle, direction } = useStore((state) => state.controls);
@@ -23,9 +46,16 @@ export const Telemetry = () => {
         borderLeft: "4px solid #00f2ff",
         zIndex: 100000,
         pointerEvents: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: "5px"
       }}
     >
-      <h3 style={{ margin: "0 0 10px 0", fontSize: "14px" }}>SISTEMAS VAE</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: "0", fontSize: "14px" }}>SISTEMAS VAE</h3>
+        {/* SAFETY TRAFFIC LIGHT */}
+        <SafetyIndicator />
+      </div>
       <div style={{ fontSize: "18px", fontWeight: "bold" }}>
         VELOCIDAD: {speed.toFixed(1)} km/h
       </div>

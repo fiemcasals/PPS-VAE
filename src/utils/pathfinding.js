@@ -2,8 +2,8 @@ import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 import { useStore } from "../store/useStore.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a
-const STEER_STEPS = [-0.4, 0, 0.4]; // son el angulo maximo de giro, por los tres numeros, los resultados son las direcciones de exploracion de cada nodo, en este caso, tres hacia adelante y tres hacia atras
-const STEP_SIZE = 2; //es el largo del paso
+const STEER_STEPS = [-0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8]; // Wider range (approx ±45deg) for tight turns
+// const STEP_SIZE = 2 (Removed, now dynamic)
 
 //EXPORTO DE useStore para usarlo en el heurístico, para poder acceder al peso del gradiente dinámico.
 const { config } = useStore.getState();
@@ -20,6 +20,7 @@ class Node {
     steer = 0,
     dir = 1,
     weight = BASE_HEURISTIC_WEIGHT,
+    distanceSinceGearSwitch = 0, // MAURI: Track distance since last gear switch
   ) {
     this.x = x; // Posición X en el mundo
     this.z = z; // Posición Z en el mundo
@@ -31,6 +32,7 @@ class Node {
     this.parent = parent; //Nodo padre, es decir, el nodo anterior en el camino
     this.steer = steer; //Angulo de giro
     this.direction = dir; //Direccion (1 o -1)
+    this.distanceSinceGearSwitch = distanceSinceGearSwitch;
   }
 }
 
@@ -124,6 +126,13 @@ const heuristic = (pos, goal, macroContext) => {
   if (!macroContext || !macroContext.gradientMap) return h_euclidean; //validacion para ver si existe el mapa de gradiente.
 
   const { graph, gradientMap } = macroContext;
+
+  // MAURI DEBUG: Check if gradient is working
+  if (Math.random() < 0.0005) {
+    const keys = Object.keys(gradientMap);
+    console.log(`[A* Heuristic] MacroContext Active. GradientMap Size: ${keys.length}. Sample Cost: ${gradientMap[keys[0]]}`);
+  }
+
   let minCost = Infinity; //se va a buscar el min costo, de los nodos cercanos, por eso se declara la variable en infinito
 
   // Optimización: Buscar solo nodos rojos cercanos.
@@ -144,10 +153,31 @@ const heuristic = (pos, goal, macroContext) => {
     if (d > 50) continue; // Si el nodo está a más de 50m, ignoralo y pasá al siguiente.
 
     const { config } = useStore.getState();
+    // MAURI: Remove clamp per user request
     const GRADIENT_WEIGHT = config.gradient_weight || 5.0;
-    const BASE_HEURISTIC_WEIGHT_DYN = config.base_heuristic_weight || 10.0;
+    const BASE_HEURISTIC_WEIGHT_DYN = config.base_heuristic_weight || 15.0;
+    const ALIGN_WEIGHT = 5.0; // Penalty for bad orientation
 
-    const totalH = combinedCost * GRADIENT_WEIGHT + d * BASE_HEURISTIC_WEIGHT_DYN; // Costo total: combinación del costo del gradiente y la distancia física al nodo rojo
+    // Calculate orientation penalty
+    let headingPenalty = 0;
+    const currentHeading = (pos.theta !== undefined) ? pos.theta : pos.heading;
+
+    if (currentHeading !== undefined) {
+      // Angulo hacia el nodo rojo
+      const angleToNode = Math.atan2(node.x - pos.x, node.z - pos.z);
+      // Diferencia angular
+      let diff = Math.abs(currentHeading - angleToNode);
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      diff = Math.abs(diff);
+      headingPenalty = diff * ALIGN_WEIGHT;
+    }
+
+    const totalH = combinedCost * GRADIENT_WEIGHT + d * BASE_HEURISTIC_WEIGHT_DYN + headingPenalty;
+
+    // MAURI DEBUG: Check heuristic components
+    if (Math.random() < 0.0001) {
+      console.log(`[A* H] Node: ${node.id}, Cost: ${combinedCost}, GradW: ${GRADIENT_WEIGHT}, D: ${d.toFixed(1)}, TotalH: ${totalH.toFixed(1)}`);
+    }
 
     if (totalH < minCost) {
       minCost = totalH;
@@ -168,9 +198,16 @@ export async function findPathAsync(
 ) {
   const { config } = useStore.getState();
   const DEBUG_ITER_LIMIT = config.debug_iter_limit || 50000;
-  const BACKWARD_WEIGHT = config.backward_weight || 200.0;
-  const STEERING_COST = config.steering_cost || 20.0;
+  const BACKWARD_WEIGHT = config.backward_weight || 50.0;
+  const STEERING_COST = config.steering_cost || 0.5;
   const GEAR_SWITCH_COST = config.gear_switch_cost || 50.0;
+  const STEERING_CHANGE_COST = config.steering_change_cost || 0.1; // MAURI: Smoothness penalty
+  const STEP_SIZE = config.step_size || 1.5; // MAURI: Dynamic Step Size
+  // MAURI: Density Penalty Config
+  const DENSITY_WEIGHT = config.density_weight || 0.0;
+  const SECTOR_SIZE = 5.0; // 5 meters grid for density counting
+
+  const MIN_MANEUVER_LENGTH = VEHICLE_CONFIG.LENGTH; // Force full car length before switching gear (Y-Turn)
 
   // Initialize
   const openSet = [
@@ -181,33 +218,35 @@ export async function findPathAsync(
       start.heading, //orientacion del nodo
       0, //costo real (g) inicia en 0 porque es el nodo inicial
       heuristic(start, goal, macroContext), //costo heurístico (h) se calcula con la función heurística, que combina la distancia al objetivo y el costo del gradiente
+      null, 0, 1, 1.0, 0 // MAURI: Weight = 1.0 because heuristic() already contains weights!
     ),
   ];
   // ... rest of init ...
   const closedSet = new Map(); //closedSet es un mapa que se usa para llevar un registro de los nodos ya explorados, con su costo g más bajo encontrado hasta ahora. La clave es una cadena que representa el estado (x, z, theta) y el valor es el costo g asociado a ese estado.
   const explored = []; //explored es una lista de nodos que han sido explorados, se usa para visualización y depuración. Se llena con las coordenadas de cada nodo que se saca del openSet para ser evaluado.
+  const densityMap = new Map(); // MAURI: Density Map
 
   for (let iter = 0; iter < DEBUG_ITER_LIMIT; iter++) {
     // ... yield logic ...
     if (iter % 200 === 0) {
       //cada 200 iteraciones ejecuta el siguiente codigo...
-      if (onProgress) onProgress([...explored]); //evalua si onProgress existe, y si es asi, llama a la función onProgress pasando una copia de la lista explored. Esto permite actualizar la visualización del proceso de búsqueda en tiempo real.
-      // onProgress es una variable que define
-      // los tres puntos previos de explored, asegura que se envia una copia, no el vector original, para evitar problemas de referencia y mutación externa.
+      if (onProgress) onProgress([...explored]);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      // await hace que el algoritmo se detenga exactamente en esa línea y no pase a la siguiente hasta que la Promesa se resuelva. Resolverse seria esperar un cierto tiempo. Resolve es simplemente una funcion que lo unico que hace es decir "ya esperamos el tiempo" es como un boton que se aprieta desp de que pase el tiempo, y permite salir del wait.
-      //esto permite hacer otras cosas como mover la pantalla, ya que mientras explora los nodos, esta todo tildado.
     }
 
     if (openSet.length === 0) {
-      //evalua si openSet (nodos explorados) es igual a 0.
       console.warn("A*: OpenSet vacío. No hay ruta posible.");
       break;
     }
 
-    // Simple sort for Priority Queue (JS array is fast enough for small sets, otherwise MinHeap)
+    // Simple sort for Priority Queue
     openSet.sort((a, b) => a.f - b.f);
-    const curr = openSet.shift(); //shift() elimina el primer elemento del array (el nodo con menor f) y lo devuelve para ser evaluado como el nodo actual (curr).
+    const curr = openSet.shift();
+
+    // MAURI DEBUG VERBOSE
+    if (iter % 50 === 0 && config.show_path_debug) {
+      console.log(`[A* Iter ${iter}] Pos: (${curr.x.toFixed(1)}, ${curr.z.toFixed(1)}) G: ${curr.g.toFixed(1)} H: ${curr.h.toFixed(1)} F: ${curr.f.toFixed(1)}`);
+    }
 
     // ... standard A* logic follows ...
 
@@ -222,9 +261,37 @@ export async function findPathAsync(
     // Distancia en línea recta a la meta
     const distToGoal = Math.hypot(curr.x - goal.x, curr.z - goal.z);
 
-    // CONDICIÓN DE ÉXITO:
-    // Si estamos muy cerca del centro de la celda objetivo (0.5 del tamaño de celda).
-    if (distToGoal < cellSize * 0.5) {
+    // CONDICIÓN DE ÉXITO RELAJADA:
+    // Antes: cellSize * 0.5 (muy estricto). Ahora: Max(cellSize, 3.0m).
+    const ARRIVAL_TOLERANCE = Math.max(cellSize * 1.0, 3.0);
+
+    // MAURI: "Analytic Shot" (Tiro Directo)
+    // Si estamos cerca (< 6m) y hay línea de visión directa, conectamos y terminamos.
+    if (distToGoal < 6.0) {
+      // Chequear colisión en el punto medio y en el destino final
+      const midX = (curr.x + goal.x) / 2;
+      const midZ = (curr.z + goal.z) / 2;
+      // Asumimos que si el inicio y el fin estan libres, y el medio tambien, es viable (para distancias cortas)
+      // Usamos un margen un poco mas fino (0.7) para permitir el "atraque"
+      if (!isCollision(goal.x, goal.z, curr.theta, gridData, cellSize, 0.7) &&
+        !isCollision(midX, midZ, curr.theta, gridData, cellSize, 0.7)) {
+
+        // Construir camino
+        const path = [];
+        let t = curr;
+        while (t) {
+          path.push({ x: t.x, z: t.z, steer: t.steer, direction: t.direction });
+          t = t.parent;
+        }
+        // Agregamos el goal final
+        path.reverse();
+        path.push({ x: goal.x, z: goal.z, steer: 0, direction: curr.direction });
+
+        return { path: smoothPath(path, gridData, cellSize), explored };
+      }
+    }
+
+    if (distToGoal < ARRIVAL_TOLERANCE) {
       // Reconstruimos el camino yendo hacia atrás desde el nodo final hasta el inicio
       const path = [];
       let t = curr;
@@ -240,29 +307,44 @@ export async function findPathAsync(
     // --- EXPANSIÓN DE VECINOS ---
     const nextMoves = [];
 
-    // 1. Lógica de Avance (d: 1)
-    if (curr.direction === -1) {
-      // CAMBIO DE MARCHA: Si venía de atrás, para ir adelante...
-      // MAURI FIX: Mantener el mismo ángulo de giro para continuidad
-      nextMoves.push({ d: 1, s: curr.steer });
-    } else {
-      // CONTINUIDAD: Si ya venía de adelante, usa TODOS los pasos definidos
-      for (const s of STEER_STEPS) {
-        nextMoves.push({ d: 1, s });
-      }
-    }
+    // --- EXPANSIÓN DE VECINOS (OPTIMIZADA) ---
+    const directions = [1, -1];
 
-    // --- OPCIONES PARA IR HACIA ATRÁS (d: -1) ---
-    if (curr.direction === 1) {
-      // CAMBIO DE MARCHA: Si venía de adelante, para ir atrás...
-      // MAURI FIX: Mantener el mismo ángulo de giro para continuidad
-      nextMoves.push({ d: -1, s: curr.steer });
-      // MAURI FIX: Desactivado para evitar ángulos bruscos.
-      // if (curr.steer !== 0) nextMoves.push({ d: -1, s: curr.steer });
-    } else {
-      // CONTINUIDAD: Si ya venía de atrás, usa TODOS los pasos definidos
-      for (const s of STEER_STEPS) {
-        nextMoves.push({ d: -1, s });
+    for (const d of directions) {
+      if (d !== curr.direction) {
+        // --- GEAR SWITCH LOGIC (Optimized for Y-Turns) ---
+        for (const s of STEER_STEPS) {
+          // Rule 1: No Straight Gear Switch (Force Turn)
+          if (s === 0) continue;
+
+          // Rule 2: Counter-Steer Logic (If we were turning, reverse MUST turn opposite to continue arc)
+          // Example: Forward-Left (Positive Steer) -> Stop -> Reverse-Right (Negative Steer)
+          // This ensures the car rotates 180 deg effectively.
+          if (Math.abs(curr.steer) > 0.1) {
+            // If signs are SAME, it means we are "un-turning" or doing S-turn. 
+            // We want Opposite signs for Y-turn continuity (Front Wheels Left -> Reverse Wheels Right)
+            // Wait. Physically:
+            // Forward Left (Steer > 0) -> Car yaws Left.
+            // Reverse Left (Steer > 0) -> Car yaws Right.
+            // So to continue YAWING Left (completing the U-turn), we need Reverse with Steer > 0 (Left).
+            // NO! If I drive Forward-Left, I end up facing, say, 45 deg Left.
+            // To continue turning Left while reversing, I need to steer... 
+            // In Reverse, Steer Left makes the nose go Right (Yaw Right). 
+            // In Reverse, Steer Right makes the nose go Left (Yaw Left).
+            // So: Forward Left (+Steer) -> Yaw Left.
+            //     Reverse Right (-Steer) -> Yaw Left.
+            // YES! We need OPPOSITE steer sign to maintain Yaw direction.
+            if (Math.sign(s) === Math.sign(curr.steer)) continue;
+          }
+
+          nextMoves.push({ d, s });
+        }
+      } else {
+        // --- TRAFFIC CONTINUITY (Same Gear) ---
+        // Allow all steps to maintain smooth path
+        for (const s of STEER_STEPS) {
+          nextMoves.push({ d, s });
+        }
       }
     }
 
@@ -277,13 +359,17 @@ export async function findPathAsync(
       const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
       const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
 
-      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.95))
+      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.8))
         continue;
 
       // MAURI: "Tunnel Vision Config"
       let moveCost =
         (d === 1 ? STEP_SIZE : STEP_SIZE * BACKWARD_WEIGHT) +
         Math.abs(s) * STEERING_COST;
+
+      // MAURI: Smoothness Penalty (Steering Change)
+      // Penalize difference between current steer and next steer 's'
+      moveCost += Math.abs(curr.steer - s) * STEERING_CHANGE_COST;
 
       // MAURI: Parking Penalty
       const cx = Math.floor(nextX / cellSize) * cellSize + cellSize / 2;
@@ -304,17 +390,33 @@ export async function findPathAsync(
         dynamicWeight += (iter - 1000) / 2000;
       }
 
+      // MAURI: Y-Turn Logic (Minimum Maneuver Length)
+      let nextDistanceSinceSwitch = 0;
+      if (curr.direction !== d) {
+        // Gear Switch!
+        // Check if previous segment was long enough
+        if (curr.distanceSinceGearSwitch < MIN_MANEUVER_LENGTH && curr.parent !== null) {
+          // Penalize short zig-zags heavily (or forbid them)
+          // Forbidding is safer to enforce "Y" shape.
+          continue;
+        }
+        nextDistanceSinceSwitch = 0; // Reset counter
+      } else {
+        nextDistanceSinceSwitch = curr.distanceSinceGearSwitch + STEP_SIZE;
+      }
+
       openSet.push(
         new Node(
           nextX,
           nextZ,
           nextTheta,
           nextG + dirChangeCost,
-          heuristic({ x: nextX, z: nextZ }, goal, macroContext), // <--- Updated to use macroContext
+          heuristic({ x: nextX, z: nextZ, theta: nextTheta }, goal, macroContext), // <--- Updated to use macroContext AND Theta
           curr,
           s,
           d,
-          dynamicWeight,
+          1.0, // MAURI: Use 1.0, heuristic already weighted
+          nextDistanceSinceSwitch // Pass new distance
         ),
       );
     }

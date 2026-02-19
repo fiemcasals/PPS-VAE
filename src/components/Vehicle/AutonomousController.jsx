@@ -95,18 +95,27 @@ export function AutonomousController() {
     let arrivalThreshold = config.arrival_threshold; // Default 3.0 or user value
 
     // Check for Curve (Si el próximo tramo o el actual tienen curva)
-    // nextNode.steer indica la curvatura del tramo que EMPIEZA en 'node' y termina en 'nextNode' ??
-    // No, nextNode.steer es el steer usado para llegar A nextNode desde node.
-    // Si ese steer es alto, es que vamos a entrar/recorrer una curva. Necesitamos precisión en el punto de inicio (node).
-    if (nextNode && Math.abs(nextNode.steer) > 0.05) {
-      arrivalThreshold = config.curve_threshold;
+    // nextNode.steer indica la curvatura del tramo que EMPEZA en 'node' y termina en 'nextNode' ??
+    // MAURI: Use Dynamic Vehicle Length
+    const LENGTH = config.vehicle_length || 3.0; // Default 3.0 if config missing
+
+    const isTightCurve = Math.abs(nextNode?.steer) > 0.3;
+    const isManuever = nextNode && (node.direction !== nextNode.direction);
+
+    // Ajustar threshold según situación
+    if (isTightCurve) {
+      arrivalThreshold = config.curve_threshold || 1.5; // (1.5m)
+    }
+    else if (isManuever) {
+      arrivalThreshold = config.maneuver_threshold || 0.5; // (0.5m)
+    }
+    else {
+      arrivalThreshold = config.arrival_threshold || 3.0; // (3.0m)
     }
 
-    // Si el siguiente nodo cambia de marcha (adelante/atrás), hay que ser muy precisos (Prioridad Máxima)
-    if (nextNode && nextNode.direction !== node.direction) {
-      arrivalThreshold = config.maneuver_threshold;
-    }
-
+    // Dynamic Lookahead based on length
+    // Dynamic Lookahead based on length (Unused here, logic is further down)
+    // const LOOKAHEAD = (config.lookahead_distance || 2.0) + (LENGTH * 0.2);
     // Si estamos lo suficientemente cerca, pasamos al siguiente punto de la lista
     if (d < arrivalThreshold && bestIndex < currentPath.length - 1) {
       // 1. Miramos si el siguiente punto implica cambiar de marcha
@@ -158,14 +167,22 @@ export function AutonomousController() {
     // --- LÓGICA DE LOOKAHEAD (Mirar hacia adelante) ---
     // Buscamos un punto un poco más adelante para que el giro sea suave
     // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
-    const isManuever = nextNode && nextNode.direction !== node.direction;
+    // Buscamos un punto un poco más adelante para que el giro sea suave
+    // Si el siguiente paso es un cambio de marcha, reducimos la mirada al mínimo
+    // const isManuever = nextNode && nextNode.direction !== node.direction; // Already defined above
 
+    // MAURI: Dynamic Lookahead Configurable
+    // Base toma del store (default 2.0). 
+    // + 1.0m por cada m/s de velocidad. Max 12.0m.
     // MAURI: Dynamic Lookahead Configurable
     // Base toma del store (default 2.0). 
     // + 1.0m por cada m/s de velocidad. Max 12.0m.
     const userLookahead = config.lookahead_distance || 3.5;
 
-    let dynamicLookahead = userLookahead + Math.abs(vehicleState.speed) * 1.0;
+    // MAURI: Added Vehicle Length factor for better stability
+    const lengthFactor = (config.vehicle_length || 3.0) * 0.3;
+
+    let dynamicLookahead = userLookahead + lengthFactor + Math.abs(vehicleState.speed) * 1.0;
     if (dynamicLookahead > 12.0) dynamicLookahead = 12.0;
 
     let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
