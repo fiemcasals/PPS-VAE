@@ -49,9 +49,25 @@ export function EditorToolbar() {
   // Submenú de construcciones
   const [showConstruction, setShowConstruction] = useState(false);
 
-  // Submenú de Itinerarios (Derecha)
   const [showItineraries, setShowItineraries] = useState(false);
   const [itinerary, setItinerary] = useState([]);
+  const [selectedScenario, setSelectedScenario] = useState("default");
+
+  // MAURI: Helper para saltar puntos iniciales demasiado cercanos
+  const skipPointsNearStart = (path, pos, minDistance = 2.5) => {
+    if (!path || path.length === 0) return [];
+    let firstValidIndex = 0;
+    for (let i = 0; i < path.length; i++) {
+      const dist = Math.hypot(path[i].x - pos.x, path[i].z - pos.z);
+      if (dist >= minDistance) {
+        firstValidIndex = i;
+        break;
+      }
+      // Si llegamos al final y ninguno cumple, devolvemos el último para no quedar vacíos
+      if (i === path.length - 1) firstValidIndex = i;
+    }
+    return path.slice(firstValidIndex);
+  };
 
   // Helper to ensure exclusive submenu opening
   const toggleSubmenu = (menuName) => {
@@ -208,9 +224,9 @@ export function EditorToolbar() {
       );
 
       if (result.path && result.path.length > 0) {
-        // MAURI: Skip first point (current position) to avoid overlap/errors
-        const slicedPath = result.path.slice(1);
-        setPath(slicedPath.length > 0 ? slicedPath : result.path);
+        // MAURI: Aggressive skip (remove points within 2.5m)
+        const smoothedPath = skipPointsNearStart(result.path, { x: vehicleState.x, z: vehicleState.z }, 2.5);
+        setPath(smoothedPath);
         setExplored(result.explored);
         setTargetDestination(dest);
         setAutonomous(true);
@@ -302,9 +318,14 @@ export function EditorToolbar() {
         );
 
         if (result.path && result.path.length > 0) {
-          // MAURI: Skip first point of each leg to avoid duplication at joins 
-          // and to skip the starting position in the first leg.
-          const legPath = result.path.slice(1);
+          // MAURI: Skip first point of EACH leg to avoid duplication at joins
+          // but allow closer targets in intermediate points.
+          // However, for the VERY FIRST point of the itinerary, we apply the 2.5m margin.
+          const isFirstLeg = i === 0;
+          const legPath = isFirstLeg
+            ? skipPointsNearStart(result.path, currentStart, 2.5)
+            : result.path.slice(1);
+
           fullPath = [...fullPath, ...legPath];
           fullExplored = [...fullExplored, ...result.explored];
 
@@ -447,12 +468,13 @@ export function EditorToolbar() {
     let finalPath = [];
     if (approachPath && approachPath.length > 0) {
       console.log(`[Playback] Approach Path found: ${approachPath.length} points.`);
-      // Concatenate: Approach + Recorded (Skipping first point of recorded as it overlaps)
-      finalPath = [...approachPath, ...path.slice(1)];
+      // Concatenate: Approach + Recorded (Initial skip handled by concatenation + slice)
+      const combined = [...approachPath, ...path.slice(1)];
+      finalPath = skipPointsNearStart(combined, currentPos, 2.5);
     } else {
       if (distToStart < 1.5) {
-        console.warn("[Playback] Very close to start. Using recorded path starting from 2nd point.");
-        finalPath = path.length > 1 ? path.slice(1) : [...path];
+        console.warn("[Playback] Very close to start. Using recorded path with aggressive skip.");
+        finalPath = skipPointsNearStart(path, currentPos, 2.5);
       } else {
         console.warn("[Playback] No Approach Path found and not close. Using raw path.");
         finalPath = [...path];

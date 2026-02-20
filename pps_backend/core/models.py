@@ -4,8 +4,9 @@ from django.contrib.auth.models import User
 class SimConfig(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     arrival_threshold = models.FloatField(default=3.0, help_text="Distancia para considerar llegada al nodo (m)")
-    arrival_threshold_maneuver = models.FloatField(default=0.5, help_text="Distancia para llegada en maniobras (m)")
     arrival_threshold_curve = models.FloatField(default=1.5, help_text="Distancia para llegada en curvas (m)")
+    arrival_threshold_gear = models.FloatField(default=0.5, help_text="Distancia para llegada en maniobras (m)")
+    collision_margin = models.FloatField(default=0.7, help_text="Margen de seguridad para colisiones (m)")
     lookahead_distance = models.FloatField(default=2.0, help_text="Distancia de visión a futuro (m)")
     
     # A* Planner Config

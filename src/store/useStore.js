@@ -99,6 +99,8 @@ export const useStore = create((set) => ({
     base_heuristic_weight: 50.0,
     density_weight: 1.0, // MAURI: Exploration Penalty
     debug_iter_limit: 50000,
+    step_size: 1.5,
+    steering_change_cost: 0.1,
 
     // Visualización Debug
     show_graph_debug: true,

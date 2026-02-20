@@ -37,8 +37,9 @@ def get_config(request):
     
     return JsonResponse({
         "arrival_threshold": config.arrival_threshold,
-        "maneuver_threshold": config.arrival_threshold_maneuver,
-        "curve_threshold": config.arrival_threshold_curve,
+        "arrival_threshold_curve": config.arrival_threshold_curve,
+        "arrival_threshold_gear": config.arrival_threshold_gear,
+        "collision_margin": config.collision_margin,
         "lookahead_distance": config.lookahead_distance,
         "backward_weight": config.backward_weight,
         "steering_cost": config.steering_cost,
@@ -75,8 +76,9 @@ def update_config(request):
             # Update fields
 
             config.arrival_threshold = data.get("arrival_threshold", config.arrival_threshold)
-            config.arrival_threshold_maneuver = data.get("arrival_threshold_maneuver", config.arrival_threshold_maneuver)
-            config.arrival_threshold_curve = data.get("curve_threshold", config.arrival_threshold_curve)
+            config.arrival_threshold_curve = data.get("arrival_threshold_curve", config.arrival_threshold_curve)
+            config.arrival_threshold_gear = data.get("arrival_threshold_gear", config.arrival_threshold_gear)
+            config.collision_margin = data.get("collision_margin", config.collision_margin)
             config.lookahead_distance = data.get("lookahead_distance", config.lookahead_distance)
             
             config.backward_weight = data.get("backward_weight", config.backward_weight)
