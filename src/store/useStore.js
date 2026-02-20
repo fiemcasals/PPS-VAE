@@ -79,8 +79,8 @@ export const useStore = create((set) => ({
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
   config: {
     arrival_threshold: 3.0,
-    maneuver_threshold: 1,
-    curve_threshold: 1.5,
+    arrival_threshold_curve: 1.5,
+    arrival_threshold_gear: 0.5,
     lookahead_distance: 2.0,
     backward_weight: 200.0, // Moved from root
     steering_cost: 5.0, // Reduced from 20.0 to fix exploration flood
@@ -88,6 +88,7 @@ export const useStore = create((set) => ({
     // Vehicle Dimensions (Sync with backend defaults)
     vehicle_width: 1.5,
     vehicle_length: 3.0,
+    collision_margin: 0.7, // MAURI: Configurable safety margin
 
     // Controller Config
     steering_kp: 5.0,

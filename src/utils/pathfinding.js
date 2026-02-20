@@ -2,7 +2,7 @@ import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 import { useStore } from "../store/useStore.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a
-const STEER_STEPS = [-0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8]; // Wider range (approx ±45deg) for tight turns
+const STEER_STEPS = [-0.5, -0.3, 0, 0.3, 0.5]; // Wider range (approx ±45deg) for tight turns
 // const STEP_SIZE = 2 (Removed, now dynamic)
 
 //EXPORTO DE useStore para usarlo en el heurístico, para poder acceder al peso del gradiente dinámico.
@@ -206,6 +206,7 @@ export async function findPathAsync(
   // MAURI: Density Penalty Config
   const DENSITY_WEIGHT = config.density_weight || 0.0;
   const SECTOR_SIZE = 5.0; // 5 meters grid for density counting
+  const COLLISION_MARGIN = config.collision_margin !== undefined ? config.collision_margin : 0.7;
 
   const MIN_MANEUVER_LENGTH = VEHICLE_CONFIG.LENGTH; // Force full car length before switching gear (Y-Turn)
 
@@ -359,7 +360,7 @@ export async function findPathAsync(
       const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
       const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
 
-      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.8))
+      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, COLLISION_MARGIN))
         continue;
 
       // MAURI: "Tunnel Vision Config"

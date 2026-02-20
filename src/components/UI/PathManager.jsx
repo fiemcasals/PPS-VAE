@@ -1,9 +1,9 @@
 import React from "react";
 import { useStore } from "../../store/useStore";
 
-export function PathManager({ isOpen, onClose }) {
+export function PathManager({ isOpen, onClose, onLoadAbsolute }) { // MAURI: Added onLoadAbsolute prop
     const savedPaths = useStore((state) => state.savedPaths);
-    const loadRecordedPath = useStore((state) => state.loadRecordedPath);
+    // const loadRecordedPath = useStore((state) => state.loadRecordedPath); // MAURI: Deprecated here
     const deleteRecordedPath = useStore((state) => state.deleteRecordedPath);
     const saveCurrentPath = useStore((state) => state.saveCurrentPath);
     const currentPath = useStore((state) => state.currentPath);

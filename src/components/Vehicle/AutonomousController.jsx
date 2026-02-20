@@ -104,13 +104,13 @@ export function AutonomousController() {
 
     // Ajustar threshold según situación
     if (isTightCurve) {
-      arrivalThreshold = config.curve_threshold || 1.5; // (1.5m)
+      arrivalThreshold = config.arrival_threshold_curve || 1.5; // (1.5m default)
     }
     else if (isManuever) {
-      arrivalThreshold = config.maneuver_threshold || 0.5; // (0.5m)
+      arrivalThreshold = config.arrival_threshold_gear || 0.5; // (0.5m default)
     }
     else {
-      arrivalThreshold = config.arrival_threshold || 3.0; // (3.0m)
+      arrivalThreshold = config.arrival_threshold || 3.0; // (3.0m default)
     }
 
     // Dynamic Lookahead based on length

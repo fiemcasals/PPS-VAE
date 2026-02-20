@@ -208,12 +208,12 @@ export function EditorToolbar() {
       );
 
       if (result.path && result.path.length > 0) {
-        setPath(result.path);
+        // MAURI: Skip first point (current position) to avoid overlap/errors
+        const slicedPath = result.path.slice(1);
+        setPath(slicedPath.length > 0 ? slicedPath : result.path);
         setExplored(result.explored);
         setTargetDestination(dest);
         setAutonomous(true);
-        // setOpen(false); // MAURI: Already closed at start
-        // setShowDestinations(false); // MAURI: Already closed at start
       } else {
         alert("No se encontró ruta (A* falló incluso con guía).");
       }
@@ -302,7 +302,10 @@ export function EditorToolbar() {
         );
 
         if (result.path && result.path.length > 0) {
-          fullPath = [...fullPath, ...result.path];
+          // MAURI: Skip first point of each leg to avoid duplication at joins 
+          // and to skip the starting position in the first leg.
+          const legPath = result.path.slice(1);
+          fullPath = [...fullPath, ...legPath];
           fullExplored = [...fullExplored, ...result.explored];
 
           // Actualizar 'Start' para el siguiente tramo (último punto del path actual)
@@ -379,6 +382,89 @@ export function EditorToolbar() {
   const destinations = Object.entries(gridData).filter(
     ([key, val]) => val.type === "destination",
   );
+
+  const handleLoadAbsolute = async (name) => {
+    const savedPaths = useStore.getState().savedPaths;
+    const path = savedPaths[name];
+    if (!path || path.length === 0) return;
+
+    // 1. Get Start Node of the Path
+    const startPoint = path[0];
+    const { vehicleState } = useStore.getState();
+    const currentPos = { x: vehicleState.x, z: vehicleState.z };
+
+    // 2. Compute Gradient to Start Point (So Approach uses it!)
+    const startNode = findNearestGraphNode(pathfindingGraph, currentPos.x, currentPos.z);
+    const endNode = findNearestGraphNode(pathfindingGraph, startPoint.x, startPoint.z);
+
+    let weightedMap = null;
+    if (startNode && endNode) {
+      console.log(`[Playback] Computing Gradient from ${startNode.id} to Path Start ${endNode.id}`);
+      const { startMap, endMap } = computeDualGradient(pathfindingGraph, startNode.id, endNode.id);
+
+      // Visualize this gradient too!
+      useStore.getState().setActiveGradient({
+        start: startMap,
+        end: endMap,
+        total: null // We only care about the flow to start
+      });
+
+      // Create weighted map for A*
+      if (endMap && endMap[startNode.id] !== Infinity) {
+        weightedMap = {};
+        Object.keys(pathfindingGraph).forEach(key => {
+          const s = startMap[key] || 0;
+          const e = endMap[key] || Infinity;
+          if (e !== Infinity) {
+            // Dominant Gradient to Path Start
+            weightedMap[key] = s + (e * 5.0);
+          }
+        });
+      }
+    }
+
+    // 3. Calculate Approach Path (A*)
+    const cellSize = useStore.getState().GRID_SIZE;
+    const gridData = useStore.getState().gridData;
+    const distToStart = Math.hypot(currentPos.x - startPoint.x, currentPos.z - startPoint.z);
+
+    let approachPath = null;
+    if (distToStart > 1.2) {
+      console.log("[Playback] Calculating Approach Path...");
+      const result = await findPathAsync(
+        { x: currentPos.x, z: currentPos.z, heading: vehicleState.heading },
+        { x: startPoint.x, z: startPoint.z },
+        gridData,
+        cellSize,
+        null, // No progress callback
+        { graph: pathfindingGraph, gradientMap: weightedMap } // Pass the gradient!
+      );
+      approachPath = result.path;
+    } else {
+      console.log("[Playback] Already at start point (dist < 1.2m). Skipping approach.");
+    }
+
+    let finalPath = [];
+    if (approachPath && approachPath.length > 0) {
+      console.log(`[Playback] Approach Path found: ${approachPath.length} points.`);
+      // Concatenate: Approach + Recorded (Skipping first point of recorded as it overlaps)
+      finalPath = [...approachPath, ...path.slice(1)];
+    } else {
+      if (distToStart < 1.5) {
+        console.warn("[Playback] Very close to start. Using recorded path starting from 2nd point.");
+        finalPath = path.length > 1 ? path.slice(1) : [...path];
+      } else {
+        console.warn("[Playback] No Approach Path found and not close. Using raw path.");
+        finalPath = [...path];
+      }
+    }
+
+    // 4. Set Path and Go
+    useStore.getState().setPath(finalPath);
+    useStore.getState().setTargetDestination({ name: `Playback: ${name}` });
+    useStore.getState().setAutonomous(true);
+    setShowPaths(false); // Close modal
+  };
 
   return (
     <div style={{ position: "absolute", top: "20px", left: "20px", zIndex: 1000 }}>
@@ -845,7 +931,11 @@ export function EditorToolbar() {
       )}
 
       <ScenarioManager isOpen={showScenarios} onClose={() => setShowScenarios(false)} />
-      <PathManager isOpen={showPaths} onClose={() => setShowPaths(false)} />
+      <PathManager
+        isOpen={showPaths}
+        onClose={() => setShowPaths(false)}
+        onLoadAbsolute={handleLoadAbsolute}
+      />
 
       <style>{`
         @keyframes pulse {
@@ -854,7 +944,7 @@ export function EditorToolbar() {
           100% { transform: scale(1); }
         }
       `}</style>
-    </div >
+    </div>
   );
 }
 
@@ -999,18 +1089,18 @@ function SettingsPanel({ onClose }) {
           {/* GRUPO 1: OBJETIVOS */}
           {activeGroup === "objectives" && (
             <div>
-              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🎯 Objetivos</h5>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🎯 Objetivos de Llegada</h5>
               <div>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Llegada (Normal):</label>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Camino Normal:</label>
                 <input type="number" step="0.1" name="arrival_threshold" value={localConfig.arrival_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Maniobra (R/D):</label>
-                <input type="number" step="0.1" name="maneuver_threshold" value={localConfig.maneuver_threshold} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral en Curvas:</label>
+                <input type="number" step="0.1" name="arrival_threshold_curve" value={localConfig.arrival_threshold_curve} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Curva:</label>
-                <input type="number" step="0.1" name="curve_threshold" value={localConfig.curve_threshold || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Cambio Marcha:</label>
+                <input type="number" step="0.1" name="arrival_threshold_gear" value={localConfig.arrival_threshold_gear} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
             </div>
           )}
@@ -1020,6 +1110,10 @@ function SettingsPanel({ onClose }) {
             <div>
               <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🧠 A* Planner</h5>
               <div>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Margen Obstáculos (Seguridad):</label>
+                <input type="number" step="0.1" name="collision_margin" value={localConfig.collision_margin} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Caminos (Gradient):</label>
                 <input type="number" step="0.1" name="gradient_weight" value={localConfig.gradient_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
@@ -1141,38 +1235,7 @@ function SettingsPanel({ onClose }) {
         </div>
       )}
 
-      {/* BOTÓN PERMANENTE DE DETECCIÓN (TOP RIGHT) */}
-      <div
-        style={{
-          position: "fixed",
-          top: "20px",
-          right: "20px",
-          zIndex: 2000,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-end",
-          gap: "10px"
-        }}
-      >
-        <button
-          onClick={() => setDetectionEnabled(!isDetectionEnabled)}
-          style={{
-            padding: "10px 20px",
-            cursor: "pointer",
-            background: isDetectionEnabled ? "rgba(0, 255, 0, 0.7)" : "rgba(100, 100, 100, 0.7)",
-            color: "white",
-            border: "2px solid white",
-            borderRadius: "20px",
-            fontWeight: "bold",
-            fontSize: "16px",
-            boxShadow: "0 0 10px rgba(0,0,0,0.5)",
-            backdropFilter: "blur(5px)",
-            transition: "all 0.3s ease"
-          }}
-        >
-          {isDetectionEnabled ? "👁️ Detección ON" : "👁️ Detección OFF"}
-        </button>
-      </div>
+
 
     </div>
   );
