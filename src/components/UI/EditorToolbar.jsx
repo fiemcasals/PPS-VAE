@@ -406,8 +406,16 @@ export function EditorToolbar() {
 
   const handleLoadAbsolute = async (name) => {
     const savedPaths = useStore.getState().savedPaths;
-    const path = savedPaths[name];
-    if (!path || path.length === 0) return;
+    const rawPath = savedPaths[name];
+    if (!rawPath || rawPath.length === 0) return;
+
+    // MAURI: Sanitize path - Eliminate points at exactly (0,0) that could be recording artifacts
+    // This prevents the car from trying to "go back to origin" before starting the real path.
+    const path = rawPath.filter(pt => Math.abs(pt.x) > 0.001 || Math.abs(pt.z) > 0.001);
+    if (path.length === 0) {
+      console.warn(`[Playback] Path '${name}' is empty after origin-filtering.`);
+      return;
+    }
 
     // 1. Get Start Node of the Path
     const startPoint = path[0];
@@ -465,16 +473,21 @@ export function EditorToolbar() {
       console.log("[Playback] Already at start point (dist < 1.2m). Skipping approach.");
     }
 
+    // 3.5 Refresh current position after async calculation (Car might have moved!)
+    const { vehicleState: latestVehicle } = useStore.getState();
+    const latestPos = { x: latestVehicle.x, z: latestVehicle.z };
+
     let finalPath = [];
     if (approachPath && approachPath.length > 0) {
       console.log(`[Playback] Approach Path found: ${approachPath.length} points.`);
-      // Concatenate: Approach + Recorded (Initial skip handled by concatenation + slice)
+      // Concatenate: Approach + Recorded
       const combined = [...approachPath, ...path.slice(1)];
-      finalPath = skipPointsNearStart(combined, currentPos, 2.5);
+      // MAURI: Use latest position for accurate skipping
+      finalPath = skipPointsNearStart(combined, latestPos, 1.2);
     } else {
-      if (distToStart < 1.5) {
-        console.warn("[Playback] Very close to start. Using recorded path with aggressive skip.");
-        finalPath = skipPointsNearStart(path, currentPos, 2.5);
+      if (distToStart < 2.0) {
+        console.warn("[Playback] Very close to start. Using recorded path with 1.2m skip.");
+        finalPath = skipPointsNearStart(path, latestPos, 1.2);
       } else {
         console.warn("[Playback] No Approach Path found and not close. Using raw path.");
         finalPath = [...path];
@@ -482,10 +495,20 @@ export function EditorToolbar() {
     }
 
     // 4. Set Path and Go
-    useStore.getState().setPath(finalPath);
-    useStore.getState().setTargetDestination({ name: `Playback: ${name}` });
-    useStore.getState().setAutonomous(true);
-    setShowPaths(false); // Close modal
+    if (finalPath.length > 0) {
+      console.log(`[Playback] Final Path ready with ${finalPath.length} points.`);
+      console.log(`[Playback] Vehicle Pos: {x: ${currentPos.x.toFixed(2)}, z: ${currentPos.z.toFixed(2)}}`);
+      console.log(`[Playback] First Path Point: {x: ${finalPath[0].x.toFixed(2)}, z: ${finalPath[0].z.toFixed(2)}}`);
+      if (finalPath.length > 1) {
+        console.log(`[Playback] Second Path Point: {x: ${finalPath[1].x.toFixed(2)}, z: ${finalPath[1].z.toFixed(2)}}`);
+      }
+      useStore.getState().setPath(finalPath);
+      useStore.getState().setTargetDestination({ name: `Playback: ${name}` });
+      useStore.getState().setAutonomous(true);
+      setShowPaths(false); // Close modal
+    } else {
+      console.error("[Playback] Resulting path is empty!");
+    }
   };
 
   return (

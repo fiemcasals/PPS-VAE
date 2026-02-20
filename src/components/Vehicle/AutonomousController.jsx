@@ -104,13 +104,16 @@ export function AutonomousController() {
 
     // Ajustar threshold según situación
     if (isTightCurve) {
-      arrivalThreshold = config.arrival_threshold_curve || 1.5; // (1.5m default)
+      arrivalThreshold = config.arrival_threshold_curve || 0.8; // More strict in complex curves (0.8m)
     }
     else if (isManuever) {
-      arrivalThreshold = config.arrival_threshold_gear || 0.5; // (0.5m default)
+      arrivalThreshold = config.arrival_threshold_gear || 0.5; // Precision for gears (0.5m)
     }
     else {
-      arrivalThreshold = config.arrival_threshold || 3.0; // (3.0m default)
+      // MAURI: Detect if it's a dense path (recorded) to increase precision
+      const pointDist = nextNode ? Math.hypot(nextNode.x - node.x, nextNode.z - node.z) : 5.0;
+      const isDense = pointDist < 1.0;
+      arrivalThreshold = isDense ? 1.0 : (config.arrival_threshold || 3.0);
     }
 
     // Dynamic Lookahead based on length
@@ -131,6 +134,19 @@ export function AutonomousController() {
       }
 
       bestIndex++;
+    }
+
+    // MAURI: LOG DE DEPURAOR DE REPRODUCCIÓN (Throttle ~1s)
+    if (window.vehicleDebugCounter === undefined) window.vehicleDebugCounter = 0;
+    window.vehicleDebugCounter++;
+    if (window.vehicleDebugCounter % 60 === 0) {
+      console.log(`[Pilot] Target Index: ${bestIndex}/${currentPath.length - 1}`);
+      console.log(`[Pilot] Dist to Target: ${d.toFixed(2)}m (Threshold: ${arrivalThreshold}m)`);
+      console.log(`[Pilot] Target Pos: {x: ${node.x.toFixed(2)}, z: ${node.z.toFixed(2)}}`);
+      console.log(`[Pilot] Vehicle Pos: {x: ${vehicleState.x.toFixed(2)}, z: ${vehicleState.z.toFixed(2)}}`);
+      if (nextNode) {
+        console.log(`[Pilot] Next Node: {x: ${nextNode.x.toFixed(2)}, z: ${nextNode.z.toFixed(2)}}`);
+      }
     }
 
     currentIndex.current = bestIndex;
@@ -182,8 +198,8 @@ export function AutonomousController() {
     // MAURI: Added Vehicle Length factor for better stability
     const lengthFactor = (config.vehicle_length || 3.0) * 0.3;
 
-    let dynamicLookahead = userLookahead + lengthFactor + Math.abs(vehicleState.speed) * 1.0;
-    if (dynamicLookahead > 12.0) dynamicLookahead = 12.0;
+    let dynamicLookahead = userLookahead + lengthFactor + Math.abs(vehicleState.speed) * 0.5; // Scaled down from 1.0
+    if (dynamicLookahead > 8.0) dynamicLookahead = 8.0; // Reduced from 12.0
 
     let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
 

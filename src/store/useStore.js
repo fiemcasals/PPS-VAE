@@ -81,7 +81,7 @@ export const useStore = create((set) => ({
     arrival_threshold: 3.0,
     arrival_threshold_curve: 1.5,
     arrival_threshold_gear: 0.5,
-    lookahead_distance: 2.0,
+    lookahead_distance: 1.2,
     backward_weight: 200.0, // Moved from root
     steering_cost: 5.0, // Reduced from 20.0 to fix exploration flood
     gear_switch_cost: 15.0, // Reduced from 50.0 to encourage maneuvering
@@ -215,7 +215,11 @@ export const useStore = create((set) => ({
     }
     return { isAutonomous: isActive };
   }),
-  setPath: (path) => set({ currentPath: path }),
+  setPath: (path) => {
+    // MAURI: Global Sanitization - Eliminate points at (0,0) that could be recording/init artifacts
+    const sanitized = (path || []).filter(p => Math.abs(p.x) > 0.1 || Math.abs(p.z) > 0.1);
+    set({ currentPath: sanitized });
+  },
   setExplored: (nodes) => set({ exploredNodes: nodes }),
   setExplored: (nodes) => set({ exploredNodes: nodes }),
   setTargetDestination: (dest) => set({ targetDestination: dest }),

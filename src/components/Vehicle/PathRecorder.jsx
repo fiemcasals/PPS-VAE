@@ -15,8 +15,10 @@ export function PathRecorder() {
             vehicleState.z - lastPos.current.z
         );
 
-        // Grabamos cada 0.5 metros o si es el primer punto
-        if (dist > 0.5 || (lastPos.current.x === 0 && lastPos.current.z === 0)) {
+        // Grabamos cada 0.5 metros o si es el primer punto (siempre que no estemos en el origen exacto 0,0)
+        const isAtOrigin = Math.abs(vehicleState.x) < 0.001 && Math.abs(vehicleState.z) < 0.001;
+
+        if ((dist > 0.5 || (lastPos.current.x === 0 && lastPos.current.z === 0)) && !isAtOrigin) {
             const newPoint = {
                 x: vehicleState.x,
                 z: vehicleState.z,
