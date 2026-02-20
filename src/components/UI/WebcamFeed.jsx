@@ -6,19 +6,20 @@ export function WebcamFeed() {
     const cameraMode = useStore((state) => state.cameraMode);
     const detectionThresholds = useStore((state) => state.detectionThresholds);
     const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // MAURI: Needed for background check
+    const isAutonomous = useStore((state) => state.isAutonomous);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [error, setError] = useState(null);
 
-    // Activamos detección si estamos en modo Bifocal O si el toggle global está ON (Background Safety)
-    const shouldDetect = cameraMode === "BIFOCAL" || isDetectionEnabled;
+    // Activamos detección si estamos en modo Bifocal O si el modo Autónomo está activo (Background Safety)
+    const shouldDetect = cameraMode === "BIFOCAL" || (isAutonomous && isDetectionEnabled);
     const { predictions, isLoading } = useObjectDetection(videoRef, shouldDetect, detectionThresholds.bifocal);
 
     useEffect(() => {
         let stream = null;
 
-        // MAURI: Activate webcam if Bifocal Mode selected OR Detection Enabled (Background Safety)
-        if (cameraMode === "BIFOCAL" || isDetectionEnabled) {
+        // MAURI: Activate webcam if Bifocal Mode selected OR Autonomous Mode (Background Safety)
+        if (cameraMode === "BIFOCAL" || (isAutonomous && isDetectionEnabled)) {
             const getWebcam = async () => {
                 try {
                     // MAURI: Auto-detect ZED Camera
@@ -224,16 +225,35 @@ export function WebcamFeed() {
 
     }, [predictions, cameraMode, pairedPredictions]); // Dependencia actualizada para recalcular pares
 
-    // MAURI: Allow background running if detection enabled
-    const shouldRun = cameraMode === "BIFOCAL" || isDetectionEnabled;
+    // MAURI: Allow background running if detection enabled AND in autonomous mode
+    const shouldRun = cameraMode === "BIFOCAL" || (isAutonomous && isDetectionEnabled);
 
     if (!shouldRun) return null;
 
-    // Si NO es bifocal (estamos en background), renderizamos fuera de pantalla pero FULL RESOLUCIÓN
+    // MAURI: PIP Rendering Logic
+    // If NOT is bifocal (we are in background), render a small window NEXT to Telemetry
     const isBackground = cameraMode !== "BIFOCAL";
-    const containerStyle = isBackground ? {
-        position: "fixed", top: 0, left: -2000, width: 640, height: 480, opacity: 0.1, pointerEvents: "none", zIndex: -1
-    } : {
+
+    // Position it next to Telemetry (Telemetry is top 20, left 20, width ~200)
+    const pipStyle = {
+        position: "fixed",
+        top: "20px",
+        left: "240px",
+        width: "240px",
+        height: "135px",
+        border: "2px solid #00f2ff",
+        borderRadius: "8px",
+        overflow: "hidden",
+        backgroundColor: "black",
+        zIndex: 100000,
+        boxShadow: "0 0 15px rgba(0, 242, 255, 0.5)",
+        pointerEvents: "auto",
+        transition: "all 0.3s ease",
+        display: "flex",
+        flexDirection: "column"
+    };
+
+    const fullStyle = {
         position: "absolute",
         top: 0,
         left: 0,
@@ -246,13 +266,15 @@ export function WebcamFeed() {
         alignItems: "center",
     };
 
+    const containerStyle = isBackground ? pipStyle : fullStyle;
+
     return (
         <>
             {/* GLOBAL ERROR ALERT (Visible always if error exists) */}
             {error && (
                 <div style={{
                     position: "fixed", top: "10px", left: "50%", transform: "translateX(-50%)",
-                    backgroundColor: "red", color: "white", padding: "15px", borderRadius: "8px", zIndex: 99999,
+                    backgroundColor: "red", color: "white", padding: "15px", borderRadius: "8px", zIndex: 999999,
                     boxShadow: "0 0 10px black", fontWeight: "bold"
                 }}>
                     ❌ ERROR DE CÁMARA (SEGURIDAD): {error}
@@ -260,6 +282,22 @@ export function WebcamFeed() {
             )}
 
             <div style={containerStyle}>
+                {/* PIP LABEL (Small version) or Title (Full version) */}
+                <div style={{
+                    position: "absolute",
+                    top: "5px",
+                    left: "5px",
+                    color: "lime",
+                    fontFamily: "monospace",
+                    fontSize: isBackground ? "10px" : "1.2rem",
+                    background: "rgba(0,0,0,0.6)",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    zIndex: 60,
+                    pointerEvents: "none"
+                }}>
+                    {isBackground ? "CAMERA FEED (PIP)" : "VISTA CÁMARA BIFOCO"}
+                </div>
                 {/* Contenedor 'crop' para Video y Canvas */}
                 <div style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }}>
                     {/* Video */}

@@ -17,37 +17,49 @@ export const useStore = create((set) => ({
   cameraMode: "FOLLOW",
   telemetry: { speed: 0, position: [0, 0, 0], acceleration: 0 },
   detectionThresholds: { frontal: 0.15, bifocal: 0.5 },
-  isDetectionEnabled: false, // MAURI: Global toggle for object detection
-  nearestHumanDistance: Infinity, // MAURI: SAFETY SYSTEM - Nearest person distance
-  safetyWarningAck: false, // MAURI: SAFETY SYSTEM - User acknowledged warning
-
-  // NEW: SAFETY STATUS (SAFE | CAUTION | DANGER)
+  nearestHumanDistance: Infinity,
   safetyStatus: "SAFE",
+  safetyWarningAck: false,
+  safetyAlertAck: false, // MAURI: Track if user acknowledged CURRENT danger
 
   updateSafetyStatus: (distance) => set((state) => {
+    // MAURI: Only process safety braking/alerts IF in autonomous mode
+    if (!state.isAutonomous) {
+      return {
+        nearestHumanDistance: distance,
+        safetyStatus: "SAFE",
+        safetyAlertAck: false
+      };
+    }
+
     let status = "SAFE";
-    if (distance < 2.0) status = "DANGER";
+    if (distance < 2.3) status = "DANGER";
     else if (distance < 5.0) status = "CAUTION";
 
-    // Auto-disable Autonomous Mode on DANGER
-    let isAutonomous = state.isAutonomous;
-    let controls = { ...state.controls };
+    // MAURI: Reset ACK if we become safe
+    let newAck = state.safetyAlertAck;
+    if (status !== "DANGER") {
+      newAck = false;
+    }
 
+    let controls = { ...state.controls };
     if (status === "DANGER") {
-      isAutonomous = false;
-      controls.throttle = 0; // Emergency Stop
+      controls.throttle = 0;
     } else if (status === "CAUTION") {
-      // Limit max speed/throttle if needed (logic can be refined)
       if (controls.throttle > 0.3) controls.throttle = 0.3;
     }
 
     return {
       nearestHumanDistance: distance,
       safetyStatus: status,
-      isAutonomous: isAutonomous,
+      safetyAlertAck: newAck,
       controls: controls
     };
   }),
+
+  setSafetyAlertAck: (ack) => set({ safetyAlertAck: ack }),
+
+  isDetectionEnabled: true, // MAURI: Default ON for background safety
 
   setDetectionEnabled: (value) => set({ isDetectionEnabled: value }),
   setDetectionThreshold: (camera, value) =>
