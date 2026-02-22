@@ -201,7 +201,7 @@ export function AutonomousController() {
     let dynamicLookahead = userLookahead + lengthFactor + Math.abs(vehicleState.speed) * 0.5; // Scaled down from 1.0
     if (dynamicLookahead > 8.0) dynamicLookahead = 8.0; // Reduced from 12.0
 
-    let LOOKAHEAD_DIST = isManuever ? 0.2 : dynamicLookahead;
+    let LOOKAHEAD_DIST = isManuever ? (config.lookahead_maneuver || 0.2) : dynamicLookahead;
 
     // MAURI: ADAPTIVE LOOKAHEAD FOR CURVES
     // If we are turning (angleError is high), simple lookahead cuts the corner (off-roading).
@@ -267,8 +267,8 @@ export function AutonomousController() {
         // Si detectamos curva, forzamos un Lookahead MUY CORTO (1.5m) para obligar al auto a pasar por los puntos.
         if (Math.abs(angleDiff) > 0.15) {
           // Si el lookahead actual es lejano, forzamos uno corto y reiniciamos búsqueda.
-          if (LOOKAHEAD_DIST > 1.5) {
-            LOOKAHEAD_DIST = 1.5; // Lookahead corto ("objetivo intermedio cercano")
+          if (LOOKAHEAD_DIST > (config.lookahead_curve || 1.5)) {
+            LOOKAHEAD_DIST = config.lookahead_curve || 1.5; // Lookahead corto configurable
 
             // Reset search from start with new distance
             i = currentIndex.current;

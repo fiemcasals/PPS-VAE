@@ -10,6 +10,15 @@ export const useStore = create((set) => ({
   cantidad_celdas: CANTIDAD_CELDAS,
   GRID_SIZE: GRID_SIZE,
 
+  // --- MODO DE OPERADOR ---
+  operatorMode: "vehicle", // "vehicle" | "turret"
+  setOperatorMode: (mode) => set({ operatorMode: mode }),
+
+  // --- ESTADO DE TORRETA ---
+  turretYaw: 0,    // Rotación horizontal (radianes, 0-2π = 360°)
+  turretPitch: 0,  // Elevación vertical (radianes, -2.356 a 2.356 = 270°)
+  setTurretYaw: (yaw) => set({ turretYaw: yaw }),
+  setTurretPitch: (pitch) => set({ turretPitch: Math.max(-2.356, Math.min(2.356, pitch)) }),
 
   // --- ESTADO DEL VEHÍCULO ---
   controls: { steering: 0, throttle: 0, direction: 1 },
@@ -78,6 +87,7 @@ export const useStore = create((set) => ({
   // --- ESTADO DE NAVEGACIÓN ---
   currentPath: null,
   isAutonomous: false,
+  pathfindingCancelled: false,
   vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
   targetDestination: null,
   explored: [], // Nodos explorados por A*
@@ -118,6 +128,16 @@ export const useStore = create((set) => ({
     show_graph_debug: true,
     show_path_debug: true,
     show_target_debug: true,
+
+    // Cámara
+    camera_follow_smoothing: 5.0,
+    camera_follow_distance: 35,
+    camera_driver_smoothing: 8.0,
+    camera_turret_smoothing: 0.2,
+
+    // Piloto — Lookahead por caso
+    lookahead_curve: 1.5,
+    lookahead_maneuver: 0.2,
   }, // Valores por defecto
 
   fetchConfig: async () => {

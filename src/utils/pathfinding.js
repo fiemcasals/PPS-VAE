@@ -2,7 +2,7 @@ import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 import { useStore } from "../store/useStore.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a
-const STEER_STEPS = [-0.5, -0.3, 0, 0.3, 0.5]; // Wider range (approx ±45deg) for tight turns
+const STEER_STEPS = [-0.5, -0.3, 0, 0.3, 0.5]; // 7 pasos: giro suave (0.2), medio (0.4), cerrado (0.8)
 // const STEP_SIZE = 2 (Removed, now dynamic)
 
 //EXPORTO DE useStore para usarlo en el heurístico, para poder acceder al peso del gradiente dinámico.
@@ -140,44 +140,36 @@ const heuristic = (pos, goal, macroContext) => {
 
   // Radius check optimization: Only consider nodes within 50m to avoid evaluating far-off paths
 
-  const nodes = Object.values(graph); //usamos el metodo que nos permite levantas todos los valores de los objetos(nodos rojos), del graph.
+  const nodes = Object.values(graph);
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     const combinedCost = gradientMap[node.id];
 
-    // Si el nodo es inalcanzable (infinito) o su costo total es muy alto comparado con el mejor encontrado, continua
-    if (combinedCost === Infinity || combinedCost > minCost) continue;
+    if (combinedCost === undefined || combinedCost === Infinity) continue;
 
     // Distancia física al nodo rojo
     const d = Math.hypot(pos.x - node.x, pos.z - node.z);
-    if (d > 50) continue; // Si el nodo está a más de 50m, ignoralo y pasá al siguiente.
+    if (d > 50) continue; // Solo considerar nodos en un radio de 50m
 
     const { config } = useStore.getState();
-    // MAURI: Remove clamp per user request
     const GRADIENT_WEIGHT = config.gradient_weight || 5.0;
     const BASE_HEURISTIC_WEIGHT_DYN = config.base_heuristic_weight || 15.0;
-    const ALIGN_WEIGHT = 5.0; // Penalty for bad orientation
+    const ALIGN_WEIGHT = 5.0; // Penalización por mala orientación
 
-    // Calculate orientation penalty
+    // Calcular penalización por orientación
     let headingPenalty = 0;
     const currentHeading = (pos.theta !== undefined) ? pos.theta : pos.heading;
 
     if (currentHeading !== undefined) {
-      // Angulo hacia el nodo rojo
       const angleToNode = Math.atan2(node.x - pos.x, node.z - pos.z);
-      // Diferencia angular
       let diff = Math.abs(currentHeading - angleToNode);
       while (diff > Math.PI) diff -= 2 * Math.PI;
       diff = Math.abs(diff);
       headingPenalty = diff * ALIGN_WEIGHT;
     }
 
-    const totalH = combinedCost * GRADIENT_WEIGHT + d * BASE_HEURISTIC_WEIGHT_DYN + headingPenalty;
-
-    // MAURI DEBUG: Check heuristic components
-    if (Math.random() < 0.0001) {
-      console.log(`[A* H] Node: ${node.id}, Cost: ${combinedCost}, GradW: ${GRADIENT_WEIGHT}, D: ${d.toFixed(1)}, TotalH: ${totalH.toFixed(1)}`);
-    }
+    // Heurística combinada: Costo Dijkstra + Distancia al nodo + Orientación
+    const totalH = (combinedCost * GRADIENT_WEIGHT) + (d * BASE_HEURISTIC_WEIGHT_DYN) + headingPenalty;
 
     if (totalH < minCost) {
       minCost = totalH;
@@ -197,6 +189,8 @@ export async function findPathAsync(
   macroContext = null, // { graph, gradientMap }
 ) {
   const { config } = useStore.getState();
+  // Resetear flag de cancelación al iniciar nueva búsqueda
+  useStore.setState({ pathfindingCancelled: false });
   const DEBUG_ITER_LIMIT = config.debug_iter_limit || 50000;
   const BACKWARD_WEIGHT = config.backward_weight || 50.0;
   const STEERING_COST = config.steering_cost || 0.5;
@@ -208,7 +202,7 @@ export async function findPathAsync(
   const SECTOR_SIZE = 5.0; // 5 meters grid for density counting
   const COLLISION_MARGIN = config.collision_margin !== undefined ? config.collision_margin : 0.7;
 
-  const MIN_MANEUVER_LENGTH = VEHICLE_CONFIG.LENGTH; // Force full car length before switching gear (Y-Turn)
+  const MIN_MANEUVER_LENGTH = VEHICLE_CONFIG.LENGTH; // Mínimo 1 largo de auto antes de cambiar marcha
 
   // Initialize
   const openSet = [
@@ -233,6 +227,11 @@ export async function findPathAsync(
       //cada 200 iteraciones ejecuta el siguiente codigo...
       if (onProgress) onProgress([...explored]);
       await new Promise((resolve) => setTimeout(resolve, 0));
+      // Comprobar si se canceló el pathfinding
+      if (useStore.getState().pathfindingCancelled) {
+        console.warn("A*: Búsqueda cancelada por el usuario.");
+        return { path: null, explored };
+      }
     }
 
     if (openSet.length === 0) {
@@ -262,9 +261,8 @@ export async function findPathAsync(
     // Distancia en línea recta a la meta
     const distToGoal = Math.hypot(curr.x - goal.x, curr.z - goal.z);
 
-    // CONDICIÓN DE ÉXITO RELAJADA:
-    // Antes: cellSize * 0.5 (muy estricto). Ahora: Max(cellSize, 3.0m).
-    const ARRIVAL_TOLERANCE = Math.max(cellSize * 1.0, 3.0);
+    // CONDICIÓN DE ÉXITO — configurable desde la UI
+    const ARRIVAL_TOLERANCE = config.goal_tolerance || 2.0;
 
     // MAURI: "Analytic Shot" (Tiro Directo)
     // Si estamos cerca (< 6m) y hay línea de visión directa, conectamos y terminamos.
@@ -313,31 +311,10 @@ export async function findPathAsync(
 
     for (const d of directions) {
       if (d !== curr.direction) {
-        // --- GEAR SWITCH LOGIC (Optimized for Y-Turns) ---
+        // --- GEAR SWITCH LOGIC (Liberated) ---
+        // MAURI: Allow all steer steps when switching gears. 
+        // This allows moving straight back/forward and taking any angle.
         for (const s of STEER_STEPS) {
-          // Rule 1: No Straight Gear Switch (Force Turn)
-          if (s === 0) continue;
-
-          // Rule 2: Counter-Steer Logic (If we were turning, reverse MUST turn opposite to continue arc)
-          // Example: Forward-Left (Positive Steer) -> Stop -> Reverse-Right (Negative Steer)
-          // This ensures the car rotates 180 deg effectively.
-          if (Math.abs(curr.steer) > 0.1) {
-            // If signs are SAME, it means we are "un-turning" or doing S-turn. 
-            // We want Opposite signs for Y-turn continuity (Front Wheels Left -> Reverse Wheels Right)
-            // Wait. Physically:
-            // Forward Left (Steer > 0) -> Car yaws Left.
-            // Reverse Left (Steer > 0) -> Car yaws Right.
-            // So to continue YAWING Left (completing the U-turn), we need Reverse with Steer > 0 (Left).
-            // NO! If I drive Forward-Left, I end up facing, say, 45 deg Left.
-            // To continue turning Left while reversing, I need to steer... 
-            // In Reverse, Steer Left makes the nose go Right (Yaw Right). 
-            // In Reverse, Steer Right makes the nose go Left (Yaw Left).
-            // So: Forward Left (+Steer) -> Yaw Left.
-            //     Reverse Right (-Steer) -> Yaw Left.
-            // YES! We need OPPOSITE steer sign to maintain Yaw direction.
-            if (Math.sign(s) === Math.sign(curr.steer)) continue;
-          }
-
           nextMoves.push({ d, s });
         }
       } else {
@@ -363,9 +340,20 @@ export async function findPathAsync(
       if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, COLLISION_MARGIN))
         continue;
 
-      // MAURI: "Tunnel Vision Config"
+      // MAURI: COSTO PROGRESIVO PARA MARCHA ATRÁS
+      // - Los primeros metros son baratos (permite maniobras de orientación)
+      // - A medida que se acumula distancia en reversa, el costo crece exponencialmente
+      // - backward_free_distance controla cuántos metros de reversa son baratos
+      let backwardMultiplier = 1.0;
+      if (d === -1) {
+        const reverseDist = (curr.direction === -1 ? curr.distanceSinceGearSwitch : 0) + STEP_SIZE;
+        const freeDist = config.backward_free_distance || 10.0;
+        const rampFactor = Math.min(1.0, (reverseDist / freeDist) ** 2);
+        backwardMultiplier = 2.0 + (BACKWARD_WEIGHT - 2.0) * rampFactor;
+      }
+
       let moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * BACKWARD_WEIGHT) +
+        STEP_SIZE * backwardMultiplier +
         Math.abs(s) * STEERING_COST;
 
       // MAURI: Smoothness Penalty (Steering Change)
@@ -398,7 +386,7 @@ export async function findPathAsync(
         // Check if previous segment was long enough
         if (curr.distanceSinceGearSwitch < MIN_MANEUVER_LENGTH && curr.parent !== null) {
           // Penalize short zig-zags heavily (or forbid them)
-          // Forbidding is safer to enforce "Y" shape.
+          // Forbidding is safer to enforce Y-turn shape.
           continue;
         }
         nextDistanceSinceSwitch = 0; // Reset counter
@@ -434,9 +422,9 @@ function smoothPath(path, gridData, cellSize) {
 
   // Hacemos una copia para no mutar mientras leemos
   let smoothed = [...path];
-  const iterations = 30; // MAURI: Aumentamos agresivamente el suavizado (30) para eliminar picos "V"
-  const weightCurrent = 0.4;
-  const weightNeighbors = 0.3; // Pesos más agresivos para los vecinos
+  const iterations = 60; // Más iteraciones = esquinas más redondeadas
+  const weightCurrent = 0.3;  // Punto actual tiene menos influencia
+  const weightNeighbors = 0.35; // Vecinos tiran más → redondea las puntas
 
   for (let iter = 0; iter < iterations; iter++) {
     // Importante: No mover el primero ni el último punto

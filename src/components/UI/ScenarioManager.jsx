@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useStore } from "../../store/useStore";
 import { useScenarios } from "../../hooks/useScenarios";
 
@@ -11,34 +11,48 @@ export function ScenarioManager({ isOpen, onClose }) {
     const { scenariosList, saveScenario, loadScenario, deleteScenario } =
         useScenarios();
 
-    // MAURI: Auto-load first scenario on startup
-    // And ensure "Empty" is at the end.
+    // MAURI: Auto-load first scenario ONCE on startup
+    const hasAutoLoaded = useRef(false);
+
     React.useEffect(() => {
-        // Sort list: "Empty" goes last, others alphabetical or default
+        if (hasAutoLoaded.current) return; // Ya cargamos, no repetir
+        if (scenariosList.length === 0) return; // Aún no hay escenarios
+
+        // Verificar que el grid esté vacío (primera carga)
+        const currentGridData = useStore.getState().gridData;
+        if (Object.keys(currentGridData).length > 0) {
+            hasAutoLoaded.current = true;
+            return;
+        }
+
+        // Sort list: "Empty" goes last
         const sorted = [...scenariosList].sort((a, b) => {
             if (a.toLowerCase().includes("empty") || a.toLowerCase().includes("vacio")) return 1;
             if (b.toLowerCase().includes("empty") || b.toLowerCase().includes("vacio")) return -1;
             return a.localeCompare(b);
         });
 
-        if (sorted.length > 0) {
-            // Only auto-load if grid is empty (initial load)
-            if (Object.keys(gridData).length === 0) {
-                const first = sorted[0];
-                console.log("Auto-loading scenario:", first);
-                const data = loadScenario(first);
-                if (data) {
-                    if (data.gridData) {
-                        loadGridData(data.gridData);
-                        loadBuildings(data.buildings || []);
-                    } else {
-                        loadGridData(data);
-                        loadBuildings([]);
-                    }
-                }
+        const first = sorted[0];
+        console.log("Auto-loading scenario:", first);
+        const data = loadScenario(first);
+        if (data) {
+            if (data.gridData) {
+                loadGridData(data.gridData);
+                loadBuildings(data.buildings || []);
+            } else {
+                loadGridData(data);
+                loadBuildings([]);
             }
+            // Sincronizar escenario activo con el otro operador
+            fetch("/api/sync/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ active_scenario: first }),
+            }).catch(() => { });
         }
-    }, [scenariosList, loadScenario, loadGridData, loadBuildings, gridData]);
+        hasAutoLoaded.current = true;
+    }, [scenariosList]);
 
     if (!isOpen) return null;
 
@@ -122,15 +136,20 @@ export function ScenarioManager({ isOpen, onClose }) {
                         onClick={() => {
                             const data = loadScenario(name);
                             if (data.gridData) {
-                                // Nuevo formato: Objeto compuesto
                                 loadGridData(data.gridData);
                                 loadBuildings(data.buildings || []);
                             } else {
-                                // Viejo formato: Solo la grilla
                                 loadGridData(data);
-                                loadBuildings([]); // Limpiar edificios si no hay
+                                loadBuildings([]);
                             }
-                            onClose(); // MAURI: Cerrar menú al elegir
+                            // Sincronizar escenario activo con el otro operador
+                            fetch("/api/sync/", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "same-origin",
+                                body: JSON.stringify({ active_scenario: name }),
+                            }).catch(() => { });
+                            onClose();
                         }}
                         style={{
                             display: "flex",

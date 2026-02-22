@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { useStore } from "../../store/useStore";
 import { Chassis } from "./Chassis";
 import { Wheels } from "./Wheels";
+import { Turret } from "./Turret";
 
 export function Car() {
   const setTelemetry = useStore((state) => state.setTelemetry);
@@ -54,6 +55,7 @@ export function Car() {
     <group ref={groupRef}>
       <Chassis />
       <Wheels wheelRefs={wheelRefs} />
+      <Turret />
     </group>
   );
 }

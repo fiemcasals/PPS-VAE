@@ -9,7 +9,7 @@ import { findPathAsync } from "../../utils/pathfinding";
 import { buildTopology } from "../../utils/graphBuilder";
 import { computeDualGradient, findNearestGraphNode } from "../../utils/topologyPathfinder";
 
-export function EditorToolbar() {
+export function EditorToolbar({ onBackToHub }) {
   const [open, setOpen] = useState(false);
   const [showScenarios, setShowScenarios] = useState(false);
   const [showPaths, setShowPaths] = useState(false);
@@ -614,6 +614,8 @@ export function EditorToolbar() {
                     setAutonomous(false);
                     useStore.getState().setThrottle(0);
                     useStore.getState().setSteering(0);
+                    // Cancelar pathfinding en curso
+                    useStore.setState({ pathfindingCancelled: true, currentPath: null, explored: [] });
                     setOpen(false);
                   }}
                   style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", color: "red", fontWeight: "bold" }}
@@ -698,6 +700,18 @@ export function EditorToolbar() {
               <span>⚙️ Configuración</span>
               <span>{showSettings ? "▼" : "▶"}</span>
             </button>
+
+            <div style={{ borderTop: "1px solid #eee", margin: "5px 0" }}></div>
+
+            {/* VOLVER AL HUB */}
+            {onBackToHub && (
+              <button
+                onClick={() => { onBackToHub(); setOpen(false); }}
+                style={{ padding: "10px 20px", border: "none", cursor: "pointer", background: "white", textAlign: "left", color: "#666", fontWeight: "bold" }}
+              >
+                ← Volver
+              </button>
+            )}
           </div>
 
           {/* SUBMENÚ LATERAL DE CONFIGURACIÓN */}
@@ -830,7 +844,8 @@ export function EditorToolbar() {
                           { x: startPoint.x, z: startPoint.z }, // Ir al inicio de la grabación
                           gridData,
                           GRID_SIZE,
-                          (exploredNodes) => setExplored(exploredNodes)
+                          (exploredNodes) => setExplored(exploredNodes),
+                          { graph: navGraph, gradientMap: useStore.getState().activeGradient?.total } // MAURI: Pass current gradient if exists
                         );
 
                         if (result.path) {
@@ -1081,6 +1096,7 @@ function SettingsPanel({ onClose }) {
       <GroupHeader id="planner" label="Planeador (A*)" icon="🧠" activeGroup={activeGroup} toggleGroup={toggleGroup} />
       <GroupHeader id="pilot" label="Piloto Automático" icon="🏎️" activeGroup={activeGroup} toggleGroup={toggleGroup} />
       <GroupHeader id="visualization" label="Visualización" icon="👁️" activeGroup={activeGroup} toggleGroup={toggleGroup} />
+      <GroupHeader id="camera" label="Cámara" icon="📷" activeGroup={activeGroup} toggleGroup={toggleGroup} />
 
       {/* Footer Buttons (Always Visible in Main Panel) */}
       <div style={{ display: "flex", gap: "5px", marginTop: "auto", paddingTop: "10px", borderTop: "1px solid #eee" }}>
@@ -1179,10 +1195,7 @@ function SettingsPanel({ onClose }) {
                 <input type="number" step="0.1" name="density_weight" value={localConfig.density_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Marcha Atrás:</label>
-                <input type="number" step="0.1" name="backward_weight" value={localConfig.backward_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
+
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
                 <input type="number" step="0.1" name="steering_cost" value={localConfig.steering_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
@@ -1202,18 +1215,12 @@ function SettingsPanel({ onClose }) {
           {activeGroup === "pilot" && (
             <div>
               <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🏎️ Piloto Automático</h5>
+
+              {/* VELOCIDAD MÁXIMA */}
               <div>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Distancia Visión (Lookahead):</label>
-                <input type="number" step="0.1" name="lookahead_distance" value={localConfig.lookahead_distance || 2.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Sensibilidad Volante (Kp):</label>
-                <input type="number" step="0.5" name="steering_kp" value={localConfig.steering_kp || 5.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                  <span>Velocidad Base:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{localConfig.base_speed?.toFixed(2)}</span>
+                  <span>Velocidad Máxima:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_speed || 0.4).toFixed(2)}</span>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "0.8em" }}>🐢</span>
@@ -1229,14 +1236,142 @@ function SettingsPanel({ onClose }) {
                   />
                   <span style={{ fontSize: "0.8em" }}>🐇</span>
                 </div>
+              </div>
+
+              {/* AGRESIVIDAD DE MANIOBRAS (Steering Kp) */}
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Agresividad Maniobras:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_kp || 5.0).toFixed(1)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Suave</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="10.0"
+                    step="0.5"
+                    name="steering_kp"
+                    value={localConfig.steering_kp || 5.0}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Brusco</span>
+                </div>
+                <p style={{ fontSize: "0.7em", color: "#999", margin: "3px 0 0 0" }}>
+                  Valores bajos = giros suaves. Valores altos = correcciones rápidas (puede causar zigzag).
+                </p>
+              </div>
+
+              {/* --- ANTICIPACIÓN (3 MODOS) --- */}
+              <div style={{ marginTop: "12px", borderTop: "1px dashed #ddd", paddingTop: "10px" }}>
+                <p style={{ fontSize: "0.8em", fontWeight: "bold", margin: "0 0 8px 0", color: "#555" }}>📏 Anticipación (Lookahead)</p>
+
+                {/* RECTAS */}
+                <div>
+                  <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                    <span>🛣️ Rectas:</span>
+                    <span style={{ fontWeight: "bold", color: "#28a745" }}>{parseFloat(localConfig.lookahead_distance || 3.5).toFixed(1)}m</span>
+                  </label>
+                  <input
+                    type="range" min="1.0" max="10.0" step="0.5"
+                    name="lookahead_distance"
+                    value={localConfig.lookahead_distance || 3.5}
+                    onChange={handleChange}
+                    style={{ width: "100%", cursor: "pointer" }}
+                  />
+                </div>
+
+                {/* CURVAS */}
+                <div style={{ marginTop: "6px" }}>
+                  <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                    <span>🔄 Curvas:</span>
+                    <span style={{ fontWeight: "bold", color: "#fd7e14" }}>{parseFloat(localConfig.lookahead_curve || 1.5).toFixed(1)}m</span>
+                  </label>
+                  <input
+                    type="range" min="0.5" max="5.0" step="0.25"
+                    name="lookahead_curve"
+                    value={localConfig.lookahead_curve || 1.5}
+                    onChange={handleChange}
+                    style={{ width: "100%", cursor: "pointer" }}
+                  />
+                </div>
+
+                {/* MANIOBRAS */}
+                <div style={{ marginTop: "6px" }}>
+                  <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                    <span>↩️ Maniobras (D↔R):</span>
+                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>{parseFloat(localConfig.lookahead_maneuver || 0.2).toFixed(2)}m</span>
+                  </label>
+                  <input
+                    type="range" min="0.1" max="2.0" step="0.1"
+                    name="lookahead_maneuver"
+                    value={localConfig.lookahead_maneuver || 0.2}
+                    onChange={handleChange}
+                    style={{ width: "100%", cursor: "pointer" }}
+                  />
+                </div>
+
+                <p style={{ fontSize: "0.65em", color: "#999", margin: "6px 0 0 0" }}>
+                  Rectas: más lejos = trayectoria suave. Curvas: más cerca = preciso. Maniobras: cambios D↔R.
+                </p>
+              </div>
+
+              {/* --- MARCHA ATRÁS --- */}
+              <div style={{ marginTop: "12px", borderTop: "1px dashed #ddd", paddingTop: "10px" }}>
+                <p style={{ fontSize: "0.8em", fontWeight: "bold", margin: "0 0 8px 0", color: "#555" }}>🔙 Marcha Atrás</p>
+
+                {/* PESO REVERSA */}
+                <div>
+                  <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                    <span>Peso Máximo Reversa:</span>
+                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>{parseFloat(localConfig.backward_weight || 50).toFixed(0)}</span>
+                  </label>
+                  <input
+                    type="range" min="1" max="200" step="5"
+                    name="backward_weight"
+                    value={localConfig.backward_weight || 50}
+                    onChange={handleChange}
+                    style={{ width: "100%", cursor: "pointer" }}
+                  />
+                </div>
+
+                {/* DISTANCIA REVERSA LIBRE */}
+                <div style={{ marginTop: "6px" }}>
+                  <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                    <span>Reversa Libre (antes de penalizar):</span>
+                    <span style={{ fontWeight: "bold", color: "#fd7e14" }}>{parseFloat(localConfig.backward_free_distance || 10).toFixed(0)}m</span>
+                  </label>
+                  <input
+                    type="range" min="2" max="30" step="1"
+                    name="backward_free_distance"
+                    value={localConfig.backward_free_distance || 10}
+                    onChange={handleChange}
+                    style={{ width: "100%", cursor: "pointer" }}
+                  />
+                </div>
+
+                <p style={{ fontSize: "0.65em", color: "#999", margin: "6px 0 0 0" }}>
+                  Peso: costo al superar la distancia libre. Dist Libre: metros de reversa barata para maniobrar.
+                </p>
+              </div>
+
+              {/* --- UMBRAL META --- */}
+              <div style={{ marginTop: "12px", borderTop: "1px dashed #ddd", paddingTop: "10px" }}>
+                <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                  <span>🎯 Umbral a la Meta:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.goal_tolerance || 2.0).toFixed(1)}m</span>
+                </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  name="base_speed"
-                  value={localConfig.base_speed || 0.4}
+                  type="range" min="0.5" max="5.0" step="0.25"
+                  name="goal_tolerance"
+                  value={localConfig.goal_tolerance || 2.0}
                   onChange={handleChange}
-                  style={{ width: "100%", marginTop: "5px", padding: "5px", border: "1px solid #ccc", borderRadius: "4px", textAlign: "center" }}
+                  style={{ width: "100%", cursor: "pointer" }}
                 />
+                <p style={{ fontSize: "0.65em", color: "#999", margin: "3px 0 0 0" }}>
+                  Qué tan cerca del destino debe llegar el pathfinder. Más chico = más preciso pero más lento.
+                </p>
               </div>
             </div>
           )}
@@ -1274,6 +1409,41 @@ function SettingsPanel({ onClose }) {
                   style={{ transform: "scale(1.2)", marginRight: "8px" }}
                 />
                 <label style={{ fontSize: "0.85em" }}>Mostrar Target (Bola Azul)</label>
+              </div>
+            </div>
+          )}
+
+          {/* GRUPO 5: CÁMARA */}
+          {activeGroup === "camera" && (
+            <div>
+              <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>📷 Cámara</h5>
+              <div>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Suavizado Seguimiento:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_smoothing || 5.0).toFixed(1)}</span>
+                </label>
+                <input type="range" min="1" max="20" step="0.5" name="camera_follow_smoothing" value={localConfig.camera_follow_smoothing || 5.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Distancia Seguimiento:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_distance || 35).toFixed(0)}</span>
+                </label>
+                <input type="range" min="5" max="100" step="1" name="camera_follow_distance" value={localConfig.camera_follow_distance || 35} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Suavizado Frontal:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_driver_smoothing || 8.0).toFixed(1)}</span>
+                </label>
+                <input type="range" min="1" max="20" step="0.5" name="camera_driver_smoothing" value={localConfig.camera_driver_smoothing || 8.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>Suavizado Torreta:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_turret_smoothing || 0.2).toFixed(2)}</span>
+                </label>
+                <input type="range" min="0.05" max="1.0" step="0.05" name="camera_turret_smoothing" value={localConfig.camera_turret_smoothing || 0.2} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
               </div>
             </div>
           )}

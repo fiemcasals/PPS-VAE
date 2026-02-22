@@ -84,7 +84,7 @@ export function WebcamFeed() {
                 stream.getTracks().forEach((track) => track.stop());
             }
         };
-    }, [cameraMode]);
+    }, [cameraMode, isAutonomous, isDetectionEnabled]);
 
     // Dibujar Cajas
     // MAURI: Logic for Stereo Vision (Bifocal)
@@ -238,7 +238,7 @@ export function WebcamFeed() {
     const pipStyle = {
         position: "fixed",
         top: "20px",
-        left: "240px",
+        left: "280px", // MAURI: Separado de la telemetría (antes 240px) para evitar superposición
         width: "240px",
         height: "135px",
         border: "2px solid #00f2ff",

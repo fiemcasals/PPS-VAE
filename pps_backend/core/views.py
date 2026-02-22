@@ -158,3 +158,44 @@ def delete_scenario(request):
         return JsonResponse({"error": "Scenario not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+# --- Estado Compartido en Memoria (Sincronización Multi-Operador) ---
+import threading
+
+_shared_state_lock = threading.Lock()
+_shared_state = {
+    "vehicle": {"x": 0, "y": 0, "z": 0, "heading": 0, "speed": 0},
+    "turret": {"yaw": 0, "pitch": 0},
+    "active_scenario": "",
+    "controls": {"steering": 0, "throttle": 0, "direction": 1},
+}
+
+
+@csrf_exempt
+def sync_state(request):
+    """
+    GET: Devuelve el estado compartido completo.
+    POST: Actualiza parcialmente el estado compartido.
+    """
+    global _shared_state
+
+    if request.method == "GET":
+        with _shared_state_lock:
+            return JsonResponse(_shared_state)
+
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+            with _shared_state_lock:
+                # Merge parcial: solo actualiza las keys que se enviaron
+                for key in ("vehicle", "turret", "controls"):
+                    if key in body:
+                        _shared_state[key].update(body[key])
+                if "active_scenario" in body:
+                    _shared_state["active_scenario"] = body["active_scenario"]
+            return JsonResponse({"status": "ok"})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)

@@ -15,8 +15,14 @@ export function CameraController() {
   // Referencia para suavizar el movimiento de la cámara
   const currentPosition = useRef(new THREE.Vector3());
   const currentLookAt = useRef(new THREE.Vector3());
+  const isInitialized = useRef(false);
 
   const isEditing = selectedTool !== "none";
+
+  // Reset initialization when camera mode changes
+  useEffect(() => {
+    isInitialized.current = false;
+  }, [cameraMode]);
 
   // Estado para el movimiento manual (WASD)
   const movement = useRef({
@@ -90,11 +96,14 @@ export function CameraController() {
   }, [cameraMode, isEditing, camera]);
 
   useFrame((state, delta) => {
+    const config = useStore.getState().config;
+
     // Lógica de seguimiento (FOLLOW)
     if (cameraMode === "FOLLOW" && vehicleState && !isEditing) {
       const carPos = new THREE.Vector3(vehicleState.x, 0, vehicleState.z);
-      const distance = 35;
+      const distance = config.camera_follow_distance || 35;
       const height = 10;
+      const smoothing = config.camera_follow_smoothing || 5.0;
       const cameraOffsetX = -Math.sin(vehicleState.heading) * distance;
       const cameraOffsetZ = -Math.cos(vehicleState.heading) * distance;
 
@@ -104,8 +113,15 @@ export function CameraController() {
         carPos.z + cameraOffsetZ,
       );
 
-      currentPosition.current.lerp(targetPosition, delta * 5.0);
-      currentLookAt.current.lerp(carPos, delta * 5.0);
+      // Inicializar posición en el primer frame para evitar lerp desde (0,0,0)
+      if (!isInitialized.current) {
+        currentPosition.current.copy(targetPosition);
+        currentLookAt.current.copy(carPos);
+        isInitialized.current = true;
+      }
+
+      currentPosition.current.lerp(targetPosition, delta * smoothing);
+      currentLookAt.current.lerp(carPos, delta * smoothing);
 
       camera.position.copy(currentPosition.current);
       camera.lookAt(currentLookAt.current);
@@ -113,16 +129,9 @@ export function CameraController() {
 
     // Lógica para DRIVER (Frontal)
     if (cameraMode === "DRIVER" && vehicleState) {
-      // Posición del conductor (aproximada dentro de la cabina)
-      // Ajustar offsets según el modelo del auto (e.g., +0.5m x, +1.5m y, +0.5m z relativo al centro rotado)
-      // Asumimos que heading es la rotación en Y.
-      const carPos = new THREE.Vector3(vehicleState.x, 1.6, vehicleState.z); // Altura de ojos aprox
-
-      // Offset hacia adelante (z) y un poco a la izquierda/derecha si se quiere
-      // Asumiendo +Z es "hacia adelante" en el modelo local del auto antes de rotar
-      // Pero en el mundo, heading define la dirección.
-      // Offset de 0.5 hacia adelante del centro del auto
+      const carPos = new THREE.Vector3(vehicleState.x, 1.6, vehicleState.z);
       const forwardOffset = 1.0;
+      const smoothing = config.camera_driver_smoothing || 8.0;
 
       const camX = carPos.x + Math.sin(vehicleState.heading) * forwardOffset;
       const camZ = carPos.z + Math.cos(vehicleState.heading) * forwardOffset;
@@ -134,10 +143,14 @@ export function CameraController() {
       const lookAtX = carPos.x + Math.sin(vehicleState.heading) * (forwardOffset + lookAtDist);
       const lookAtZ = carPos.z + Math.cos(vehicleState.heading) * (forwardOffset + lookAtDist);
 
-      // Lerp más rápido para sentir la inercia del auto
-      // MAURI FIX: Eliminamos lerp para que la cámara quede FIJA y sin lag (Extrictamente solidaria al auto)
-      camera.position.copy(targetPos);
-      camera.lookAt(lookAtX, 1.8, lookAtZ);
+      const targetLookAt = new THREE.Vector3(lookAtX, 1.8, lookAtZ);
+
+      // Suavizado configurable
+      currentPosition.current.lerp(targetPos, delta * smoothing);
+      currentLookAt.current.lerp(targetLookAt, delta * smoothing);
+
+      camera.position.copy(currentPosition.current);
+      camera.lookAt(currentLookAt.current);
     }
 
     // Lógica para BIFOCAL (Placeholder - Dejar libre por ahora)

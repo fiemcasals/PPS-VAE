@@ -8,6 +8,7 @@ urlpatterns = [
     path('api/scenarios/', views.list_scenarios, name='list_scenarios'),
     path('api/scenarios/save/', views.save_scenario, name='save_scenario'),
     path('api/scenarios/delete/', views.delete_scenario, name='delete_scenario'),
+    path('api/sync/', views.sync_state, name='sync_state'),
     path('logout/', views.logout_view, name='logout'),
     path('', views.login_view, name='login'),
 ]
