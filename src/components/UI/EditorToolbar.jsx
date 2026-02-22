@@ -1091,7 +1091,7 @@ function SettingsPanel({ onClose }) {
           💾 Guardar
         </button>
         <button
-          onClick={() => window.open("http://localhost:8000/login/", "_blank")}
+          onClick={() => window.open("/", "_blank")}
           style={{ padding: "8px", background: "#333", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
           title="Ir al Login"
         >

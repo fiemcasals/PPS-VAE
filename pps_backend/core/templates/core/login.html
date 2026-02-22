@@ -1,86 +1,125 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PPS-VAE Login</title>
+    <title>Comando VAE - Acceso</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: #0a0a1a;
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             color: #fff;
+            overflow: hidden;
+            position: relative;
         }
+        
+        /* Background image styling */
+        .bg-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 800px;
+            opacity: 0.15;
+            z-index: 0;
+            pointer-events: none;
+            filter: grayscale(100%) brightness(1.5);
+        }
+
         .login-container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: rgba(16, 16, 32, 0.8);
+            backdrop-filter: blur(8px);
             padding: 40px;
             border-radius: 15px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            width: 300px;
+            box-shadow: 0 0 40px rgba(0, 255, 242, 0.15);
+            border: 1px solid rgba(0, 255, 242, 0.2);
+            width: 320px;
             text-align: center;
+            z-index: 10;
         }
+
         h2 {
             margin-bottom: 30px;
             color: #00fff2;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
+            font-size: 1.5em;
+            text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
         }
+
         input {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             margin-bottom: 20px;
             background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
             color: #fff;
-            box-sizing: border-box; /* Fix padding issue */
+            box-sizing: border-box;
+            font-size: 1em;
+            transition: all 0.3s ease;
         }
+
         input:focus {
             outline: none;
             border-color: #00fff2;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 10px rgba(0, 255, 242, 0.2);
         }
+
         button {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             background: #00fff2;
             border: none;
-            border-radius: 5px;
-            color: #1a1a2e;
-            font-weight: bold;
+            border-radius: 8px;
+            color: #0a0a1a;
+            font-weight: 800;
             cursor: pointer;
             transition: all 0.3s ease;
             text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 10px;
         }
+
         button:hover {
             background: #fff;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 255, 242, 0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 255, 242, 0.5);
         }
+
         .error {
-            color: #ff6b6b;
+            color: #ff4d4d;
             font-size: 0.9em;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            background: rgba(255, 77, 77, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 77, 77, 0.2);
         }
     </style>
 </head>
 <body>
+    <img src="{% static 'core/images/vehiculo_login.png' %}" class="bg-image" alt="VAE Background">
+    
     <div class="login-container">
-        <h2>Acceso VAE</h2>
+        <h2>ACCESO VAE</h2>
         {% if error %}
-            <p class="error">{{ error }}</p>
+            <div class="error">{{ error }}</div>
         {% endif %}
         <form method="POST">
             {% csrf_token %}
-            <input type="text" name="username" placeholder="Usuario" required>
-            <input type="password" name="password" placeholder="Contraseña" required>
-            <button type="submit">Ingresar</button>
+            <input type="text" name="username" placeholder="IDENTIFICADOR" required autofocus>
+            <input type="password" name="password" placeholder="CLAVE DE ACCESO" required>
+            <button type="submit">ENTRAR AL SISTEMA</button>
         </form>
     </div>
 </body>

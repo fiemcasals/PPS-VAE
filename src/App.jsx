@@ -15,15 +15,54 @@ import { MapEditor } from "./components/World/MapEditor";
 import { AutonomousController } from "./components/Vehicle/AutonomousController";
 import { PathRecorder } from "./components/Vehicle/PathRecorder";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "./store/useStore";
 
 function App() {
   const fetchConfig = useStore((state) => state.fetchConfig);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Verificar autenticación al montar
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const response = await fetch("/api/auth/check/", { credentials: "same-origin" });
+        if (response.ok) {
+          setIsAuthenticated(true);
+        } else {
+          // No autenticado — redirigir al login
+          window.location.href = "/";
+          return;
+        }
+      } catch (err) {
+        console.warn("No se pudo verificar autenticación:", err);
+        window.location.href = "/";
+        return;
+      }
+      setAuthChecked(true);
+    }
+    checkAuth();
+  }, []);
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    if (isAuthenticated) {
+      fetchConfig();
+    }
+  }, [isAuthenticated, fetchConfig]);
+
+  // Mientras se verifica, mostrar pantalla de carga
+  if (!authChecked) {
+    return (
+      <div style={{
+        width: "100vw", height: "100vh",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "#1a1a2e", color: "#fff", fontSize: "1.2rem"
+      }}>
+        Verificando autenticación...
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>

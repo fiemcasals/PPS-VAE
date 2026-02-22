@@ -31,3 +31,17 @@ class SimConfig(models.Model):
 
     def __str__(self):
         return f"Config for {self.user.username}"
+
+
+class Scenario(models.Model):
+    """Escenario/mapa guardado con su grid data."""
+    name = models.CharField(max_length=255, unique=True)
+    grid_data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']

@@ -122,7 +122,7 @@ export const useStore = create((set) => ({
 
   fetchConfig: async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/config/");
+      const response = await fetch("/api/config/");
       if (response.ok) {
         const data = await response.json();
         // Merge with existing config to preserve defaults for missing keys
@@ -138,7 +138,7 @@ export const useStore = create((set) => ({
     // Actualización optimista
     set((state) => ({ config: { ...state.config, ...newConfig } }));
     try {
-      await fetch("http://localhost:8000/api/config/update/", {
+      await fetch("/api/config/update/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newConfig),

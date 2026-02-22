@@ -1,10 +1,10 @@
 import json
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
-from .models import SimConfig
+from .models import SimConfig, Scenario
 
 def login_view(request):
     if request.method == "POST":
@@ -14,12 +14,23 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            # Si hay un parámetro 'next', redirigir, sino al admin o home
-            return redirect("http://localhost:5173") # Redirigir de vuelta a la app
+            # Redirigir al dashboard del frontend
+            return redirect("/dashboard/")
         else:
             return render(request, "core/login.html", {"error": "Credenciales inválidas"})
     
     return render(request, "core/login.html")
+
+def check_auth(request):
+    """API endpoint para verificar si el usuario está autenticado."""
+    if request.user.is_authenticated:
+        return JsonResponse({"authenticated": True, "username": request.user.username})
+    return JsonResponse({"authenticated": False}, status=401)
+
+def logout_view(request):
+    """Cierra la sesión del usuario."""
+    logout(request)
+    return redirect("/")
 
 @csrf_exempt # Simplificación para dev. En prod usar tokens CSRF.
 def get_config(request):
@@ -101,3 +112,49 @@ def update_config(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=400)
     return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
+
+
+# --- Scenario API (Mapas/Escenarios) ---
+
+@csrf_exempt
+def list_scenarios(request):
+    """Lista todos los escenarios guardados."""
+    scenarios = Scenario.objects.all()
+    data = {s.name: s.grid_data for s in scenarios}
+    return JsonResponse(data)
+
+
+@csrf_exempt
+def save_scenario(request):
+    """Guarda o actualiza un escenario."""
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        body = json.loads(request.body)
+        name = body.get("name", "").strip()
+        grid_data = body.get("grid_data", {})
+        if not name:
+            return JsonResponse({"error": "Name is required"}, status=400)
+        scenario, created = Scenario.objects.update_or_create(
+            name=name,
+            defaults={"grid_data": grid_data}
+        )
+        return JsonResponse({"status": "ok", "created": created})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def delete_scenario(request):
+    """Elimina un escenario por nombre."""
+    if request.method != "DELETE":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        body = json.loads(request.body)
+        name = body.get("name", "").strip()
+        deleted, _ = Scenario.objects.filter(name=name).delete()
+        if deleted:
+            return JsonResponse({"status": "ok"})
+        return JsonResponse({"error": "Scenario not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)

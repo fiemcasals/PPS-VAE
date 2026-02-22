@@ -17,7 +17,7 @@ export function useObjectDetection(sourceRef, isActive = true, threshold = 0.5) 
                 // Esto requiere que hayas ejecutado "download_model.sh" previamente.
                 const loadedModel = await cocoSsd.load({
                     base: "lite_mobilenet_v2",
-                    modelUrl: "/models/lite_mobilenet_v2/model.json"
+                    modelUrl: `${import.meta.env.BASE_URL}models/lite_mobilenet_v2/model.json`
                 });
                 setModel(loadedModel);
                 setIsLoading(false);

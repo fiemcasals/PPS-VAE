@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-i*k&ztx^*9udw2z1n-w17zjwd@ksbs_b&d6a4i)+$tafj@i4yx
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+
 
 
 # Application definition
@@ -52,12 +52,40 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# 1. Orígenes permitidos para CORS (comunicación entre puertos)
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
+    "http://comandovae",
+    "https://comandovae",
+    "http://comandovae.misitiowebpersonal.com.ar",
+    "https://comandovae.misitiowebpersonal.com.ar",
+    "http://localhost:5173",  # Para que React pueda hablar con Django en desarrollo
+    "http://127.0.0.1:5173",
 ]
+
+# Permitir envío de cookies de sesión en requests cross-origin
+CORS_ALLOW_CREDENTIALS = True
+
+# 2. Orígenes confiables para CSRF (seguridad de formularios/POST)
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
+    "http://comandovae",
+    "https://comandovae",
+    "http://comandovae.misitiowebpersonal.com.ar",
+    "https://comandovae.misitiowebpersonal.com.ar",
+    "http://localhost:8000",
 ]
+
+# 3. Asegúrate de que Django permita el Host
+ALLOWED_HOSTS = ["comandovae", "comandovae.misitiowebpersonal.com.ar", "localhost", "127.0.0.1"]
+
+
+# Configuración para Proxy (Nginx)
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Cookies de sesión — compatible con HTTP (local) y HTTPS (producción)
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 ROOT_URLCONF = 'pps_backend.urls'
 
@@ -125,3 +153,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'static'
+
+# Auth redirects
+LOGIN_URL = 'login'
