@@ -14,10 +14,12 @@ export function Turret() {
     useFrame(() => {
         const { turretYaw, turretPitch } = useStore.getState();
         if (yawGroupRef.current) {
-            yawGroupRef.current.rotation.y = turretYaw;
+            // Invertimos Yaw para coincidir con la cámara (Three.js CW vs CCW)
+            yawGroupRef.current.rotation.y = -turretYaw;
         }
         if (pitchGroupRef.current) {
-            pitchGroupRef.current.rotation.x = turretPitch;
+            // Invertimos Pitch para que positivo sea MIRAR ARRIBA (Three.js x+ es rotar hacia ABAJO)
+            pitchGroupRef.current.rotation.x = -turretPitch;
         }
     });
 

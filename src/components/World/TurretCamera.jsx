@@ -18,13 +18,15 @@ export function TurretCamera() {
         if (!vehicleState) return;
 
         const vehicleHeading = vehicleState.heading;
-        // Yaw total = heading del vehículo + rotación de la torreta
-        const totalYaw = vehicleHeading + turretYaw;
+        // MAURI: SYNC FIX
+        // El cañón en Turret.jsx rota -turretYaw. 
+        // El auto rota +vehicleHeading.
+        // El ángulo mundial REAL del cañón es: vehicleHeading - turretYaw
+        const totalYaw = vehicleHeading - turretYaw;
 
         // Posición de la torreta en el mundo
-        // (El auto está a y=0.6, la torreta base a +0.55, el arma a +0.1+0.03)
-        const turretWorldY = 0.6 + 0.55 + 0.1 + 0.15; // a la altura de la mira
-        const turretOffsetLocal = { x: 0, z: -0.2 }; // offset local en el auto
+        const turretWorldY = 0.6 + 0.55 + 0.1 + 0.15;
+        const turretOffsetLocal = { x: 0, z: -0.2 };
 
         // Rotar offset por heading del vehículo
         const cosH = Math.cos(vehicleHeading);
@@ -32,20 +34,19 @@ export function TurretCamera() {
         const turretWorldX = vehicleState.x + turretOffsetLocal.x * cosH - turretOffsetLocal.z * sinH;
         const turretWorldZ = vehicleState.z + turretOffsetLocal.x * sinH + turretOffsetLocal.z * cosH;
 
-        // Posición de la cámara: DETRÁS del arma (offset negativo en la dirección del cañón)
-        const behindDistance = 0.6; // distancia detrás del arma
-        const camX = turretWorldX - Math.sin(totalYaw) * behindDistance;
-        const camZ = turretWorldZ - Math.cos(totalYaw) * behindDistance;
-        const camY = turretWorldY + 0.1 - Math.sin(turretPitch) * behindDistance * 0.3;
-
-        // Punto de mira: lejos en la dirección del cañón
+        // Punto de mira
         const lookDistance = 50;
+        const behindDistance = 0.6; // RE-ADDED: Missing constant
         const cosPitch = Math.cos(turretPitch);
         const sinPitch = Math.sin(turretPitch);
 
         const lookX = turretWorldX + Math.sin(totalYaw) * cosPitch * lookDistance;
         const lookY = turretWorldY + sinPitch * lookDistance;
         const lookZ = turretWorldZ + Math.cos(totalYaw) * cosPitch * lookDistance;
+
+        const camX = turretWorldX - Math.sin(totalYaw) * behindDistance;
+        const camZ = turretWorldZ - Math.cos(totalYaw) * behindDistance;
+        const camY = turretWorldY + 0.1 - Math.sin(turretPitch) * behindDistance * 0.3;
 
         // Posición y lookAt INSTANTÁNEOS — la diana queda fija con el arma, sin arrastre
         camera.position.set(camX, camY, camZ);

@@ -7,7 +7,7 @@ import { useStore } from "../../store/useStore";
  * Muestra: joystick de torreta + indicadores de ángulo.
  * No incluye controles de conducción (throttle, steering).
  */
-export function TurretHUD() {
+export function TurretHUD({ onBack }) {
     const turretYaw = useStore((state) => state.turretYaw);
     const turretPitch = useStore((state) => state.turretPitch);
     const vehicleState = useStore((state) => state.vehicleState);
@@ -18,6 +18,43 @@ export function TurretHUD() {
     return (
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <TurretJoystick />
+
+            {/* Botón Volver (Lápiz) */}
+            <button
+                onClick={onBack}
+                title="Volver al Editor"
+                style={{
+                    position: "fixed",
+                    top: "40px",
+                    left: "40px",
+                    width: "50px",
+                    height: "50px",
+                    backgroundColor: "rgba(0, 0, 0, 0.6)",
+                    border: "2px solid #e94560",
+                    borderRadius: "12px",
+                    color: "#e94560",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    pointerEvents: "auto",
+                    zIndex: 100001,
+                    fontSize: "24px",
+                    backdropFilter: "blur(5px)",
+                    boxShadow: "0 0 15px rgba(233, 69, 96, 0.3)",
+                    transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#e94560";
+                    e.currentTarget.style.color = "#fff";
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.6)";
+                    e.currentTarget.style.color = "#e94560";
+                }}
+            >
+                ✏️
+            </button>
 
             {/* Indicador de ángulos */}
             <div style={{

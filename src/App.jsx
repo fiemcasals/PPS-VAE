@@ -103,7 +103,7 @@ function App() {
       )}
       {isTurretMode && (
         <>
-          <TurretHUD />
+          <TurretHUD onBack={() => setCurrentView("hub")} />
           {/* ScenarioManager oculto para auto-cargar el escenario sincronizado */}
           <ScenarioManager isOpen={false} onClose={() => { }} />
         </>

@@ -25,15 +25,16 @@ export function TurretJoystick() {
             const store = useStore.getState();
 
             if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
-                // Yaw: rotación continua (loop 0-2π)
-                let newYaw = store.turretYaw - x * YAW_SPEED;
+                // Yaw: Joystick Right (x > 0) -> Gira Derecha (+Yaw)
+                let newYaw = store.turretYaw + x * YAW_SPEED;
                 // Normalizar a 0-2π
                 if (newYaw > Math.PI * 2) newYaw -= Math.PI * 2;
                 if (newYaw < 0) newYaw += Math.PI * 2;
                 store.setTurretYaw(newYaw);
 
-                // Pitch: limitado por el setter del store (-2.356 a 2.356)
-                const newPitch = store.turretPitch + y * PITCH_SPEED;
+                // Pitch: Joystick Up (y < 0) -> Mira Arriba (+Pitch)
+                // Invertimos y porque en DOM 'y' es positivo hacia abajo
+                const newPitch = store.turretPitch - y * PITCH_SPEED;
                 store.setTurretPitch(newPitch);
             }
 
