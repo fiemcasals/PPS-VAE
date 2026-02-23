@@ -152,7 +152,8 @@ export function AutonomousController() {
     currentIndex.current = bestIndex;
 
     // Si llegamos al final de la ruta y estamos cerca del último punto, frenamos
-    if (currentIndex.current >= currentPath.length - 1 && d < 1.0) {
+    const finalThreshold = config.arrival_threshold_final || 1.0;
+    if (currentIndex.current >= currentPath.length - 1 && d < finalThreshold) {
       setThrottle(0);
       setSteering(0);
       setAutonomous(false); // Apagar modo autónomo

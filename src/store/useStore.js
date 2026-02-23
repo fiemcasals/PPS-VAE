@@ -104,6 +104,7 @@ export const useStore = create((set) => ({
     arrival_threshold: 3.0,
     arrival_threshold_curve: 1.5,
     arrival_threshold_gear: 0.5,
+    arrival_threshold_final: 1.0,
     lookahead_distance: 1.2,
     backward_weight: 200.0, // Moved from root
     steering_cost: 5.0, // Reduced from 20.0 to fix exploration flood

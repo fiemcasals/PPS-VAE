@@ -196,9 +196,18 @@ export function EditorToolbar({ onBackToHub }) {
   };
 
   const handleItineraryDrive = async (itineraryOverride = null) => {
-    const activeItinerary = itineraryOverride || itinerary;
+    // MAURI: Robustness guard - ensure we have an array, not a React Event object
+    const activeItinerary = (Array.isArray(itineraryOverride)) ? itineraryOverride : itinerary;
 
-    if (isCalculating || activeItinerary.length === 0) return;
+    if (isCalculating || !activeItinerary || activeItinerary.length === 0) {
+      console.warn("[Itinerary] No valid itinerary to drive.");
+      return;
+    }
+
+    // MAURI: Clear all visualization states for a fresh start
+    useStore.getState().setActiveMacroPath([]);
+    useStore.getState().setActiveWaypoints([]);
+    useStore.getState().setActiveGradient(null);
 
     // MAURI: Close menus immediately for feedback
     setOpen(false);
@@ -916,7 +925,7 @@ export function EditorToolbar({ onBackToHub }) {
               {/* 3. ACCIONES */}
               <div style={{ display: "flex", gap: "5px" }}>
                 <button
-                  onClick={handleItineraryDrive}
+                  onClick={() => handleItineraryDrive()}
                   disabled={itinerary.length === 0 || isCalculating}
                   style={{
                     flex: 1, padding: "8px", background: isCalculating ? "#ccc" : "#4caf50", color: "white",
@@ -1111,6 +1120,10 @@ function SettingsPanel({ onClose }) {
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Cambio Marcha:</label>
                 <input type="number" step="0.1" name="arrival_threshold_gear" value={localConfig.arrival_threshold_gear} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+              </div>
+              <div style={{ marginTop: "8px" }}>
+                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Destino Final (Meta):</label>
+                <input type="number" step="0.1" name="arrival_threshold_final" value={localConfig.arrival_threshold_final || 1.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
             </div>
           )}
