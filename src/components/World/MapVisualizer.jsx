@@ -5,48 +5,36 @@ export function MapVisualizer() {
   const gridData = useStore((state) => state.gridData);
   const buildings = useStore((state) => state.buildings);
   const GRID_SIZE = useStore((state) => state.GRID_SIZE);
-  // MAURI: Obtener el grafo para visualizarlo
   const navGraph = useStore((state) => state.navGraph);
   const activeMacroPath = useStore((state) => state.activeMacroPath);
-  const activeGradient = useStore((state) => state.activeGradient); // MAURI: Gradient Data
-  const exploredNodes = useStore((state) => state.exploredNodes);
+  const activeWaypoints = useStore((state) => state.activeWaypoints || []);
+  const activeGradient = useStore((state) => state.activeGradient);
   const config = useStore((state) => state.config);
 
   // DEBUG: Check if we are receiving the path
   if (activeMacroPath && activeMacroPath.length > 0) {
-    // Log only once or throttle? React renders often. 
-    // We'll log the first few nodes to check format.
-    // console.log("MapVisualizer ActivePath:", activeMacroPath[0], " GraphKeys:", Object.keys(navGraph||{})[0]);
+    // console.log("MapVisualizer ActivePath:", activeMacroPath[0]);
   }
 
   if (!gridData) return null;
 
   return (
     <group>
-      {/* 0. VISUALIZACIÓN DE NODOS EXPLORADOS (Removed per user request) */}
-
-
       {/* 1. VISUALIZACIÓN DEL GRAFO TOPOLÓGICO (DEBUG) */}
       {config.show_graph_debug && navGraph && Object.values(navGraph).map((node) => {
-        // MAURI: Check if this node is part of the ACTIVE MACRO PATH
-        let isTrace = false;
-        if (activeMacroPath && activeMacroPath.includes(node.id)) {
-          isTrace = true;
-          // console.log("🟢 Rendering Trace Node:", node.id);
-        }
+        const isWaypoint = activeWaypoints.includes(node.id);
 
         return (
           <group key={node.id}>
-            {/* Nodo (Disco 2D con Texto) */}
             {/* Nodo (Disco 2D con Texto) */}
             <group position={[node.x, 0.25, node.z]}>
               <mesh rotation={[-Math.PI / 2, 0, 0]}>
                 <circleGeometry args={[1.5, 64]} />
                 <meshBasicMaterial
-                  color="#ff0000"
+                  color={isWaypoint ? "#0000ff" : "#ff0000"} // BLUE if waypoint, RED otherwise
                   transparent
                   opacity={0.8}
-                  depthWrite={false} // Evita problemas de z-sorting con el texto o suelo
+                  depthWrite={false}
                 />
               </mesh>
 
@@ -142,7 +130,7 @@ export function MapVisualizer() {
 
               return (
                 <Line
-                  key={`${node.id}-${neighbor.id}`}
+                  key={`${node.id} -${neighbor.id} `}
                   points={[[node.x, 3, node.z], [n.x, 3, n.z]]}
                   color={isEdgeTrace ? "#0000ff" : "#ffaaaa"} // Blue active, pale red others
                   lineWidth={isEdgeTrace ? 4 : 1}

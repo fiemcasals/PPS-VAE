@@ -7,7 +7,7 @@ import { findPathAsync } from "../../utils/pathfinding";
 
 // Importamos herramientas del Grafo Topológico
 import { buildTopology } from "../../utils/graphBuilder";
-import { computeDualGradient, findNearestGraphNode } from "../../utils/topologyPathfinder";
+import * as Topology from "../../utils/topologyPathfinder";
 
 export function EditorToolbar({ onBackToHub }) {
   const [open, setOpen] = useState(false);
@@ -35,6 +35,7 @@ export function EditorToolbar({ onBackToHub }) {
   const navGraph = useStore((state) => state.navGraph);
   const setNavGraph = useStore((state) => state.setNavGraph);
   const setActiveMacroPath = useStore((state) => state.setActiveMacroPath);
+  const config = useStore((state) => state.config);
 
   // --- RECORDING STATE ---
   const isRecording = useStore((state) => state.isRecording);
@@ -145,24 +146,12 @@ export function EditorToolbar({ onBackToHub }) {
     // 1. Construir/Obtener Grafo Topológico
     const graph = getOrBuildGraph();
 
-    // 2. Encontrar nodos de inicio y fin en el grafo
-    const startNode = findNearestGraphNode(graph, vehicleState.x, vehicleState.z);
-
-    // MAURI FIX: Resolver destino usando Nearest también, porque la simplificación cambia las claves
-    const endNode = findNearestGraphNode(graph, destX, destZ);
-
-    // MAURI: Logic change - Sequential Routing
-    // Instead of A* with Heuristic, we will do: Start -> Node1 -> Node2 ... -> Destination
-    let fullPath = [];
-    let fullExplored = [];
-
     try {
       setExplored([]);
 
-      // 1. Identificar Nodos de Inicio y Fin en el Grafo
-      const startNode = findNearestGraphNode(graph, vehicleState.x, vehicleState.z);
-      // El EndNode lo sacamos directamente del ID del destino si es posible, o buscamos el más cercano
-      const endNode = findNearestGraphNode(graph, destX, destZ);
+      // 2. Encontrar nodos de inicio y fin en el grafo
+      const startNode = Topology.findNearestGraphNode(graph, vehicleState.x, vehicleState.z);
+      const endNode = Topology.findNearestGraphNode(graph, destX, destZ);
 
       if (!startNode || !endNode) {
         alert("No se pudo conectar con la red vial (Grafo).");
@@ -170,79 +159,47 @@ export function EditorToolbar({ onBackToHub }) {
         return;
       }
 
-      console.log(`[Editor] Calculating Gradient Field from ${endNode.id}...`);
+      console.log(`[Editor] Calculating Macro Route from ${startNode.id} to ${endNode.id}...`);
 
-      // 2. Calcular DOBLE GRADIENTE
-      // - startMap: Cosine (Visual) -> Distancia desde Origen
-      // - endMap: Heuristic (Nav) -> Distancia al Destino
-      const { startMap, endMap } = computeDualGradient(graph, startNode.id, endNode.id);
+      // 2. Calcular RUTA MACRO (Dijkstra)
+      const { macroPath } = Topology.computeDualGradient(graph, startNode.id, endNode.id);
 
-      if (!endMap || endMap[startNode.id] === Infinity) {
+      if (!macroPath || macroPath.length === 0) {
         alert("Destino inalcanzable (Isla desconectada).");
         setIsCalculating(false);
         return;
       }
 
-      console.log(`[Editor] Gradient calculated.`);
+      console.log(`[Editor] MacroPath found: ${macroPath.length} nodes.`);
 
-      // 3. COMBINAR GRADIENTES PONDERADOS
-      // Para generar una pendiente "cuesta abajo" hacia el destino:
-      // Weight(End) > Weight(Start).
-      // Costo = Start + (End * 2.5).
-      // - En camino óptimo: Start sube 1, End baja 1. Neto: Baja 1.5. (Pendiente suave).
-      // - En desvío/callejón: Start sube 1, End sube 1. Neto: Sube 3.5. (Pared vertical).
-      // Esto crea un "río" que fluye hacia el destino, con orillas muy empinadas.
-      const weightedMap = {};
-      Object.keys(graph).forEach(key => {
-        const s = startMap[key] || 0;
-        const e = endMap[key] || Infinity;
-        if (e === Infinity) {
-          weightedMap[key] = Infinity;
-        } else {
-          weightedMap[key] = s + (e * 5.0); // MAURI: Stronger Gradient 5.0
-        }
-      });
+      // MAURI: Calcular destinos intermedios (múltiplos de 4 según pedido)
+      const waypoints = macroPath.filter((id, index) => index > 0 && index < macroPath.length - 1 && index % 4 === 0);
 
-      // Visualización: Pasar { start, end } para los textos pequeños, y usar weightedMap para lógica interna?
-      // No, activeGradient soporta { start, end, total: weightedMap } si lo modificamos.
-      // O simplemente pasamos { start, end } y dejamos que el visualizador calcule el total ponderado.
-      // Vamos a pasar `weightedMap` como 'total' explícito en un objeto extendido.
-      useStore.getState().setActiveGradient({
-        start: startMap,
-        end: endMap,
-        total: weightedMap
-      });
+      // 3. GENERAR ITINERARIO
+      const newItinerary = [...waypoints, destKey];
+      setItinerary(newItinerary);
 
-      // 4. Ejecutar A* Guiado por COSTO PONDERADO (weightedMap)
-      const result = await findPathAsync(
-        { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading },
-        { x: destX, z: destZ },
-        gridData,
-        GRID_SIZE,
-        (exploredNodes) => setExplored(exploredNodes),
-        { graph, gradientMap: weightedMap }
-      );
+      // ACTUALIZACIÓN INMEDIATA PARA VISUALIZACIÓN
+      useStore.getState().setActiveWaypoints(waypoints);
+      useStore.getState().setActiveMacroPath(macroPath);
 
-      if (result.path && result.path.length > 0) {
-        // MAURI: Aggressive skip (remove points within 2.5m)
-        const smoothedPath = skipPointsNearStart(result.path, { x: vehicleState.x, z: vehicleState.z }, 2.5);
-        setPath(smoothedPath);
-        setExplored(result.explored);
-        setTargetDestination(dest);
-        setAutonomous(true);
-      } else {
-        alert("No se encontró ruta (A* falló incluso con guía).");
-      }
+      console.log(`[Editor] Generated Itinerary (${newItinerary.length} points):`, newItinerary);
+
+      // 4. EJECUTAR USANDO LA LÓGICA DE ITINERARIOS
+      handleItineraryDrive(newItinerary);
+
     } catch (e) {
-      console.error(e);
+      console.error("[Editor] Navigation Error:", e);
       alert("Error en sistema de navegación.");
-    } finally {
       setIsCalculating(false);
     }
   };
 
-  const handleItineraryDrive = async () => {
-    if (isCalculating || itinerary.length === 0) return;
+  const handleItineraryDrive = async (itineraryOverride = null) => {
+    const activeItinerary = itineraryOverride || itinerary;
+
+    if (isCalculating || activeItinerary.length === 0) return;
+
     // MAURI: Close menus immediately for feedback
     setOpen(false);
     setShowDestinations(false);
@@ -250,33 +207,34 @@ export function EditorToolbar({ onBackToHub }) {
     setExplored([]);
     setPath([]);
 
+    console.log(`[Itinerary] Starting execution of ${activeItinerary.length} legs.`);
+
     const { vehicleState } = useStore.getState();
     let currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
 
     let fullPath = [];
-    let fullExplored = [];
+    let allWaypoints = []; // Para visualizar los puntos azules intermedios
 
     // Construir grafo una vez para todo el itinerario
     const graph = getOrBuildGraph();
 
     try {
-      for (let i = 0; i < itinerary.length; i++) {
-        const destKey = itinerary[i];
-        const dest = gridData[destKey];
-        if (!dest) continue;
-
+      for (let i = 0; i < activeItinerary.length; i++) {
+        const destKey = activeItinerary[i];
+        // En un itinerario calculado, destKey es un ID de nodo "x,z"
         const [destX, destZ] = destKey.split(",").map(Number);
+        const destObj = gridData[destKey] || { name: `Waypoint`, type: "waypoint" };
+
+        console.log(`[Itinerary] Leg ${i + 1}/${activeItinerary.length} -> Target: ${destKey}`);
 
         // --- LÓGICA MACRO PARA CADA TRAMO ---
-        const startNode = findNearestGraphNode(graph, currentStart.x, currentStart.z);
-        // const endNodeId = destKey; // destKey might not be exact node ID if simplified graph
-        const endNode = findNearestGraphNode(graph, destX, destZ);
+        const startNode = Topology.findNearestGraphNode(graph, currentStart.x, currentStart.z);
+        const endNode = Topology.findNearestGraphNode(graph, destX, destZ);
 
         let weightedMap = null;
 
         if (startNode && endNode) {
-          // MAURI: Use Dual Gradient (Same as handleAutoDrive)
-          const { startMap, endMap } = computeDualGradient(graph, startNode.id, endNode.id);
+          const { startMap, endMap } = Topology.computeDualGradient(graph, startNode.id, endNode.id);
 
           if (endMap && endMap[startNode.id] !== Infinity) {
             weightedMap = {};
@@ -286,81 +244,72 @@ export function EditorToolbar({ onBackToHub }) {
               if (e === Infinity) {
                 weightedMap[key] = Infinity;
               } else {
-                weightedMap[key] = s + (e * 5.0); // Strong gradient
+                // PRIORIZAR DISTANCIA: En tramos cortos intermedios, el gradiente ayuda 
+                // pero ya no es el único factor. Aumentamos la ponderación del gradiente local.
+                weightedMap[key] = s + (e * 5.0);
               }
             });
 
-            // Update Visualization for this leg (can overwrite previous)
+            // Actualizar visualización del gradiente para este tramo
             useStore.getState().setActiveGradient({
               start: startMap,
               end: endMap,
               total: weightedMap
             });
-
-            // MAURI DEBUG
-            const wKeys = Object.keys(weightedMap);
-            if (wKeys.length > 0) {
-              console.log(`[Itinerary] WeightedMap Generated. Size: ${wKeys.length}. Sample: ${wKeys[0]} = ${weightedMap[wKeys[0]]}`);
-            } else {
-              console.warn("[Itinerary] WeightedMap is EMPTY!");
-            }
           }
         }
-        // ------------------------------------
 
+        // MAURI: PESO A DISTANCIA MEJORADO (Heuristic Weight Overrides)
+        // Usamos el peso definido en la UI (config.base_heuristic_weight)
         const result = await findPathAsync(
           currentStart,
           { x: destX, z: destZ },
           gridData,
           GRID_SIZE,
-          (exploredNodes) => setExplored(exploredNodes),
-          { graph, gradientMap: weightedMap } // <--- MAURI: Pass correct context object
+          (exploredNodes) => setExplored((prev) => [...prev, ...exploredNodes]),
+          { graph, gradientMap: null }, // <--- MAURI: DESCONECTAR EL GRADIENTE PARA BUSQUEDA LOCAL
+          { base_heuristic_weight: config.base_heuristic_weight } // <--- MAURI: Usar el peso de la UI
         );
 
         if (result.path && result.path.length > 0) {
-          // MAURI: Skip first point of EACH leg to avoid duplication at joins
-          // but allow closer targets in intermediate points.
-          // However, for the VERY FIRST point of the itinerary, we apply the 2.5m margin.
           const isFirstLeg = i === 0;
           const legPath = isFirstLeg
             ? skipPointsNearStart(result.path, currentStart, 2.5)
             : result.path.slice(1);
 
           fullPath = [...fullPath, ...legPath];
-          fullExplored = [...fullExplored, ...result.explored];
 
-          // Actualizar 'Start' para el siguiente tramo (último punto del path actual)
+          // Actualizar 'Start' para el siguiente tramo
           const lastPoint = result.path[result.path.length - 1];
-          // Calcular heading basado en los últimos puntos para mantener continuidad
           let newHeading = currentStart.heading;
           if (result.path.length >= 2) {
             const prevPoint = result.path[result.path.length - 2];
-            // Math.atan2(x, z) porque en este sistema 0 es Norte (+Z) aparentemente, o hay que chequear.
-            // En pathfinding.js: nextX = ... sin(theta), nextZ = ... cos(theta).
-            // Entonces x = sin, z = cos.
-            // tan(theta) = x / z. -> theta = atan2(x, z).
             newHeading = Math.atan2(lastPoint.x - prevPoint.x, lastPoint.z - prevPoint.z);
           }
           currentStart = { x: lastPoint.x, z: lastPoint.z, heading: newHeading };
 
+          // Si es un waypoint interno del grafo, lo marcamos para el visualizador
+          if (!gridData[destKey] || gridData[destKey].type !== "destination") {
+            allWaypoints.push(destKey);
+          }
+
         } else {
-          console.warn(`No se pudo trazar ruta al destino intermedio: ${destKey}`);
-          alert(`No se pudo llegar a ${dest.name || "destino"}. abortando itinerario.`);
+          console.warn(`No se pudo trazar ruta al destino: ${destKey}`);
+          alert(`No se pudo llegar a ${destObj.name || "el punto intermedio"}. Abortando.`);
           break;
         }
       }
 
       if (fullPath.length > 0) {
         setPath(fullPath);
-        setExplored(fullExplored); // Quizás mostrar todo lo explorado al final
+        useStore.getState().setActiveWaypoints(allWaypoints);
         setAutonomous(true);
-        // setOpen(false);
         setShowItineraries(false);
       }
 
     } catch (e) {
       console.error(e);
-      alert("Error calculando itinerario");
+      alert("Error calculando itinerario secuencial.");
     } finally {
       setIsCalculating(false);
     }
@@ -423,13 +372,13 @@ export function EditorToolbar({ onBackToHub }) {
     const currentPos = { x: vehicleState.x, z: vehicleState.z };
 
     // 2. Compute Gradient to Start Point (So Approach uses it!)
-    const startNode = findNearestGraphNode(pathfindingGraph, currentPos.x, currentPos.z);
-    const endNode = findNearestGraphNode(pathfindingGraph, startPoint.x, startPoint.z);
+    const startNode = Topology.findNearestGraphNode(pathfindingGraph, currentPos.x, currentPos.z);
+    const endNode = Topology.findNearestGraphNode(pathfindingGraph, startPoint.x, startPoint.z);
 
     let weightedMap = null;
     if (startNode && endNode) {
       console.log(`[Playback] Computing Gradient from ${startNode.id} to Path Start ${endNode.id}`);
-      const { startMap, endMap } = computeDualGradient(pathfindingGraph, startNode.id, endNode.id);
+      const { startMap, endMap } = Topology.computeDualGradient(pathfindingGraph, startNode.id, endNode.id);
 
       // Visualize this gradient too!
       useStore.getState().setActiveGradient({
@@ -1174,31 +1123,72 @@ function SettingsPanel({ onClose }) {
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Margen Obstáculos (Seguridad):</label>
                 <input type="number" step="0.1" name="collision_margin" value={localConfig.collision_margin} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
+              {/* PESO DISTANCIA (GREEDINESS) */}
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>🚀 Codicia (Peso Distancia):</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_heuristic_weight || 50).toFixed(0)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Lento</span>
+                  <input
+                    type="range" min="1" max="500" step="10"
+                    name="base_heuristic_weight"
+                    value={localConfig.base_heuristic_weight || 50}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Directo</span>
+                </div>
+              </div>
+
+              {/* PENALIZACIÓN DENSIDAD */}
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>🧹 Limpieza (Densidad):</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.density_weight || 0).toFixed(1)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Off</span>
+                  <input
+                    type="range" min="0" max="10" step="0.5"
+                    name="density_weight"
+                    value={localConfig.density_weight || 0}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Max</span>
+                </div>
+              </div>
+
+              {/* COSTO GIRO */}
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>📐 Costo Giro:</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_cost || 5).toFixed(1)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Libre</span>
+                  <input
+                    type="range" min="0" max="50" step="1"
+                    name="steering_cost"
+                    value={localConfig.steering_cost || 5}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Recto</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "12px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
+
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Caminos (Gradient):</label>
                 <input type="number" step="0.1" name="gradient_weight" value={localConfig.gradient_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Paso A* (Step Size):</label>
-                <input type="number" step="0.1" name="step_size" value={localConfig.step_size} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Peso Distancia (Heuristic):</label>
-                <input type="number" step="0.1" name="base_heuristic_weight" value={localConfig.base_heuristic_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Límite Iteraciones:</label>
                 <input type="number" step="1000" name="debug_iter_limit" value={localConfig.debug_iter_limit} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Penalización Densidad (Exploration):</label>
-                <input type="number" step="0.1" name="density_weight" value={localConfig.density_weight} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px", borderTop: "1px dashed #ccc", paddingTop: "5px" }}></div>
-
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Giro:</label>
-                <input type="number" step="0.1" name="steering_cost" value={localConfig.steering_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Brusquedad (Smoothness):</label>

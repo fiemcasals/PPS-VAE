@@ -90,13 +90,14 @@ export const useStore = create((set) => ({
   pathfindingCancelled: false,
   vehicleState: { x: 0, y: 0, z: 0, heading: Math.PI, speed: 0 },
   targetDestination: null,
-  explored: [], // Nodos explorados por A*
   navGraph: null, // Grafo Topológico
   activeMacroPath: null, // Ruta macro actual para visualización (Legacy)
   activeGradient: {}, // MAURI: Mapa de calor (Dijkstra Costs) para visualización
+  activeWaypoints: [], // MAURI: Nodos resaltados en azul (múltiplos de 4)
   setNavGraph: (graph) => set({ navGraph: graph }),
   setActiveMacroPath: (path) => set({ activeMacroPath: path }),
   setActiveGradient: (gradient) => set({ activeGradient: gradient }),
+  setActiveWaypoints: (waypoints) => set({ activeWaypoints: waypoints }),
 
   // --- CONFIGURACIÓN DE NAVEGACIÓN (Backend Persistence) ---
   config: {
@@ -213,6 +214,7 @@ export const useStore = create((set) => ({
       currentPath: [],
       exploredNodes: [],
       navGraph: null,
+      activeWaypoints: [],
     }),
   loadGridData: (data) => set({ gridData: data, navGraph: null }),
   loadBuildings: (data) => set({ buildings: data }),
@@ -252,8 +254,9 @@ export const useStore = create((set) => ({
     const sanitized = (path || []).filter(p => Math.abs(p.x) > 0.1 || Math.abs(p.z) > 0.1);
     set({ currentPath: sanitized });
   },
-  setExplored: (nodes) => set({ exploredNodes: nodes }),
-  setExplored: (nodes) => set({ exploredNodes: nodes }),
+  setExplored: (nodes) => set((state) => ({
+    exploredNodes: typeof nodes === 'function' ? nodes(state.exploredNodes) : nodes
+  })),
   setTargetDestination: (dest) => set({ targetDestination: dest }),
   setTestConfig: (config) =>
     set((state) => ({ testConfig: { ...state.testConfig, ...config } })),

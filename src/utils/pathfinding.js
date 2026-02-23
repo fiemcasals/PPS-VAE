@@ -2,7 +2,7 @@ import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 import { useStore } from "../store/useStore.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a
-const STEER_STEPS = [-0.5, -0.3, 0, 0.3, 0.5]; // 7 pasos: giro suave (0.2), medio (0.4), cerrado (0.8)
+const STEER_STEPS = [-0.6, -0.3, 0, 0.3, 0.6]; // 7 pasos: giro suave (0.2), medio (0.4), cerrado (0.8)
 // const STEP_SIZE = 2 (Removed, now dynamic)
 
 //EXPORTO DE useStore para usarlo en el heurístico, para poder acceder al peso del gradiente dinámico.
@@ -120,10 +120,26 @@ class PriorityQueue {
 // Y la distancia de la posicion evaluada al goal
 // Devuelve un numero positivo, el valor del punto rojo mas la distancia al destino, multiplicado ambos por coficientes. Busca devolver el valor mas chicos de los nodos rojos y la distancia hasta el destino.
 
-const heuristic = (pos, goal, macroContext) => {
+const heuristic = (pos, goal, macroContext, weightOverrides = {}) => {
   const h_euclidean = Math.hypot(pos.x - goal.x, pos.z - goal.z); //costo por la distancia euclidiana al objetivo
 
-  if (!macroContext || !macroContext.gradientMap) return h_euclidean; //validacion para ver si existe el mapa de gradiente.
+  const { config } = useStore.getState();
+  const BASE_HEURISTIC_WEIGHT_DYN = weightOverrides.base_heuristic_weight ?? config.base_heuristic_weight ?? 15.0;
+  const ALIGN_WEIGHT = 5.0; // Penalización por mala orientación
+
+  // Calcular penalización por orientación (siempre se aplica)
+  let alignment_penalty = 0;
+  const currentHeading = (pos.theta !== undefined) ? pos.theta : pos.heading;
+  if (currentHeading !== undefined && goal.theta !== undefined) {
+    const angle_diff = Math.abs(currentHeading - goal.theta);
+    const shortest_angle = Math.min(angle_diff, 2 * Math.PI - angle_diff);
+    alignment_penalty = shortest_angle * ALIGN_WEIGHT;
+  }
+
+  // Si no hay mapa de gradiente, devolvemos euclidiana ponderada + alineacion
+  if (!macroContext || !macroContext.gradientMap) {
+    return (h_euclidean * BASE_HEURISTIC_WEIGHT_DYN) + alignment_penalty;
+  }
 
   const { graph, gradientMap } = macroContext;
 
@@ -151,9 +167,8 @@ const heuristic = (pos, goal, macroContext) => {
     const d = Math.hypot(pos.x - node.x, pos.z - node.z);
     if (d > 50) continue; // Solo considerar nodos en un radio de 50m
 
-    const { config } = useStore.getState();
-    const GRADIENT_WEIGHT = config.gradient_weight || 5.0;
-    const BASE_HEURISTIC_WEIGHT_DYN = config.base_heuristic_weight || 15.0;
+    const GRADIENT_WEIGHT = weightOverrides.gradient_weight ?? config.gradient_weight ?? 5.0;
+    const BASE_HEURISTIC_WEIGHT_DYN = weightOverrides.base_heuristic_weight ?? config.base_heuristic_weight ?? 15.0;
     const ALIGN_WEIGHT = 5.0; // Penalización por mala orientación
 
     // Calcular penalización por orientación
@@ -187,20 +202,30 @@ export async function findPathAsync(
   cellSize,
   onProgress, //es una funcion que se le pasa(en js se puede hacer), que se llama cada cierto numero de iteraciones para actualizar la visualizacion del proceso de busqueda, pasando una copia de la lista de nodos explorados hasta el momento.
   macroContext = null, // { graph, gradientMap }
+  weightOverrides = {}  // MAURI: Allow overriding weights locally
 ) {
   const { config } = useStore.getState();
   // Resetear flag de cancelación al iniciar nueva búsqueda
   useStore.setState({ pathfindingCancelled: false });
   const DEBUG_ITER_LIMIT = config.debug_iter_limit || 50000;
-  const BACKWARD_WEIGHT = config.backward_weight || 50.0;
-  const STEERING_COST = config.steering_cost || 0.5;
-  const GEAR_SWITCH_COST = config.gear_switch_cost || 50.0;
-  const STEERING_CHANGE_COST = config.steering_change_cost || 0.1; // MAURI: Smoothness penalty
+  const BACKWARD_WEIGHT = weightOverrides.backward_weight ?? config.backward_weight ?? 50.0;
+  const BACKWARD_FREE_DIST = weightOverrides.backward_free_distance ?? config.backward_free_distance ?? 10.0;
+  const STEERING_COST = weightOverrides.steering_cost ?? config.steering_cost ?? 0.5;
+  const GEAR_SWITCH_COST = weightOverrides.gear_switch_cost ?? config.gear_switch_cost ?? 50.0;
+  const STEERING_CHANGE_COST = weightOverrides.steering_change_cost ?? config.steering_change_cost ?? 0.1; // MAURI: Smoothness penalty
   const STEP_SIZE = config.step_size || 1.5; // MAURI: Dynamic Step Size
   // MAURI: Density Penalty Config
-  const DENSITY_WEIGHT = config.density_weight || 0.0;
+  const DENSITY_WEIGHT = weightOverrides.density_weight ?? config.density_weight ?? 0.0;
   const SECTOR_SIZE = 5.0; // 5 meters grid for density counting
   const COLLISION_MARGIN = config.collision_margin !== undefined ? config.collision_margin : 0.7;
+
+  console.log(`[A*] Starting search with weights:`, {
+    heuristic_weight: weightOverrides.base_heuristic_weight ?? config.base_heuristic_weight,
+    backward_weight: BACKWARD_WEIGHT,
+    backward_free_dist: BACKWARD_FREE_DIST,
+    steering_cost: STEERING_COST,
+    density_weight: DENSITY_WEIGHT
+  });
 
   const MIN_MANEUVER_LENGTH = VEHICLE_CONFIG.LENGTH; // Mínimo 1 largo de auto antes de cambiar marcha
 
@@ -212,7 +237,7 @@ export async function findPathAsync(
       start.z, //ubicacion fisica del nodo en z
       start.heading, //orientacion del nodo
       0, //costo real (g) inicia en 0 porque es el nodo inicial
-      heuristic(start, goal, macroContext), //costo heurístico (h) se calcula con la función heurística, que combina la distancia al objetivo y el costo del gradiente
+      heuristic(start, goal, macroContext, weightOverrides), //costo heurístico (h) se calcula con la función heurística, que combina la distancia al objetivo y el costo del gradiente
       null, 0, 1, 1.0, 0 // MAURI: Weight = 1.0 because heuristic() already contains weights!
     ),
   ];
@@ -341,20 +366,32 @@ export async function findPathAsync(
         continue;
 
       // MAURI: COSTO PROGRESIVO PARA MARCHA ATRÁS
-      // - Los primeros metros son baratos (permite maniobras de orientación)
-      // - A medida que se acumula distancia en reversa, el costo crece exponencialmente
-      // - backward_free_distance controla cuántos metros de reversa son baratos
       let backwardMultiplier = 1.0;
       if (d === -1) {
         const reverseDist = (curr.direction === -1 ? curr.distanceSinceGearSwitch : 0) + STEP_SIZE;
-        const freeDist = config.backward_free_distance || 10.0;
-        const rampFactor = Math.min(1.0, (reverseDist / freeDist) ** 2);
-        backwardMultiplier = 2.0 + (BACKWARD_WEIGHT - 2.0) * rampFactor;
+        const rampFactor = Math.min(1.0, (reverseDist / BACKWARD_FREE_DIST) ** 2);
+
+        // MAURI: Escalamiento dinámico. 
+        // Solo aplicamos el greedyScale a la parte penalizada (BACKWARD_WEIGHT)
+        // El costo base se mantiene bajo para permitir la 'distancia libre'
+        const greedyScale = Math.max(1.0, (weightOverrides.base_heuristic_weight ?? config.base_heuristic_weight ?? 15.0) / 10.0);
+        backwardMultiplier = 1.5 + (BACKWARD_WEIGHT * greedyScale - 1.5) * rampFactor;
+
+        if (iter % 1000 === 0) {
+          console.log(`[A* Reverse] Dist: ${reverseDist.toFixed(1)}m, Free: ${BACKWARD_FREE_DIST}m, Mult: ${backwardMultiplier.toFixed(1)}`);
+        }
       }
+
+      // MAURI: Density Penalty (Exploration Control)
+      const sectorX = Math.floor(nextX / SECTOR_SIZE);
+      const sectorZ = Math.floor(nextZ / SECTOR_SIZE);
+      const sectorKey = `${sectorX},${sectorZ}`;
+      const density = densityMap.get(sectorKey) || 0;
 
       let moveCost =
         STEP_SIZE * backwardMultiplier +
-        Math.abs(s) * STEERING_COST;
+        Math.abs(s) * STEERING_COST +
+        density * DENSITY_WEIGHT; // <--- MAURI: Penalize explored areas
 
       // MAURI: Smoothness Penalty (Steering Change)
       // Penalize difference between current steer and next steer 's'
@@ -370,11 +407,14 @@ export async function findPathAsync(
 
       const nextG = curr.g + moveCost;
 
+      // Update density for this sector
+      densityMap.set(sectorKey, density + 1);
+
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
       const dirChangeCost = curr.direction !== d ? GEAR_SWITCH_COST : 0;
 
       // MAURI: PESO DINÁMICO PROGRESIVO
-      let dynamicWeight = BASE_HEURISTIC_WEIGHT;
+      let dynamicWeight = weightOverrides.base_heuristic_weight ?? config.base_heuristic_weight ?? 50.0;
       if (iter > 1000) {
         dynamicWeight += (iter - 1000) / 2000;
       }
@@ -400,7 +440,7 @@ export async function findPathAsync(
           nextZ,
           nextTheta,
           nextG + dirChangeCost,
-          heuristic({ x: nextX, z: nextZ, theta: nextTheta }, goal, macroContext), // <--- Updated to use macroContext AND Theta
+          heuristic({ x: nextX, z: nextZ, theta: nextTheta }, goal, macroContext, weightOverrides), // <--- Updated to use macroContext AND Theta
           curr,
           s,
           d,

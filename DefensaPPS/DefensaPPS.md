@@ -1,6 +1,9 @@
 # Defensa del Proyecto PPS-VAE
 ## Proyecto: Sistema de Comando y Control para Vehículos Autónomos (SCCpVA)
 
+## Resumen Ejecutivo
+El **SCCpVA (Sistema de Comando y Control para Vehículos Autónomos)** es un ecosistema tecnológico avanzado diseñado para dotar de inteligencia, autonomía y conectividad al proyecto VAE (Vehículo Autónomo Eléctrico). Su objetivo principal es permitir la operación remota segura y el control táctico a gran distancia, eliminando la dependencia del contacto visual directo. Mediante una arquitectura robusta (React, Django, VPN), una navegación segmentada (Dijkstra + A* Híbrido) y un entorno de simulación de alta fidelidad, el sistema permite la validación de misiones complejas y la integración de sensores de seguridad y sistemas de defensa, garantizando la preservación de la vida humana en operaciones hostiles o logísticas.
+
 ## 1. Introducción
 El presente proyecto, denominado **SCCpVA** (Sistema de Comando y Control para Vehículos Autónomos), surge como una respuesta a la necesidad de evolución tecnológica dentro de la Facultad de Ingeniería del Ejército (FIE). Actualmente, la institución cuenta con un prototipo vehicular capaz de ser operado de forma remota a corta distancia; sin embargo, este esquema presenta limitaciones críticas: la dependencia de la línea de visión directa, la falta de una interfaz de telemetría visual robusta y la imposibilidad de operar en escenarios de larga distancia.
 

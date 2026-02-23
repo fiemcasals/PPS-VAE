@@ -5,9 +5,11 @@
  */
 
 // Helper: Run Dijkstra from a source node
-const runDijkstra = (graph, startNodeId) => {
+export const runDijkstra = (graph, startNodeId) => {
     const costs = {};
+    const predecessors = {};
     const pq = new Set();
+    const visited = [];
 
     Object.keys(graph).forEach(id => {
         costs[id] = Infinity;
@@ -16,7 +18,6 @@ const runDijkstra = (graph, startNodeId) => {
 
     if (graph[startNodeId]) costs[startNodeId] = 0;
 
-    // console.time("DijkstraRun");
     while (pq.size > 0) {
         let minNode = null;
         let minDist = Infinity;
@@ -29,36 +30,51 @@ const runDijkstra = (graph, startNodeId) => {
 
         if (!minNode || minDist === Infinity) break;
         pq.delete(minNode);
+        visited.push(minNode);
 
         graph[minNode].neighbors.forEach(edge => {
             const alt = costs[minNode] + edge.dist;
             if (alt < costs[edge.id]) {
                 costs[edge.id] = alt;
+                predecessors[edge.id] = minNode;
             }
         });
     }
-    // console.timeEnd("DijkstraRun");
-    return costs;
+    return { costs, sortedNodes: visited, predecessors };
+};
+
+const reconstructPath = (predecessors, startId, endId) => {
+    const path = [];
+    let current = endId;
+    while (current !== undefined) {
+        path.unshift(current);
+        if (current === startId) break;
+        current = predecessors[current];
+    }
+    return path[0] === startId ? path : [];
 };
 
 /**
- * Calculates two gradient fields:
- * 1. From Start (Distance traveled from origin) -> For Visualization
- * 2. To End (Distance remaining to goal) -> For Navigation Heuristic
+ * Calculates two gradient fields and the shortest macro path.
  */
 export const computeDualGradient = (graph, startNodeId, endNodeId) => {
-    // console.time("DualGradient");
+    // 1. Cost from Start (pq uses startNodeId as root)
+    const resStart = runDijkstra(graph, startNodeId);
 
-    // 1. Cost from Start (For Visualization: 0 -> High)
-    const startMap = runDijkstra(graph, startNodeId);
+    // 2. Cost to End (pq uses endNodeId as root)
+    const resEnd = runDijkstra(graph, endNodeId);
 
-    // 2. Cost to End (For Navigation Heuristic: High -> 0)
-    // Runs Dijkstra backwards from Goal (assuming undirected graph for now, or reversed edges)
-    // Since edges are bidirectional or simple neighbors, this works.
-    const endMap = runDijkstra(graph, endNodeId);
+    // Reconstruct the SHORTEST PATH between start and end.
+    // Since resStart ran from Start, its predecessors point away from Start.
+    // So resStart.predecessors[endNodeId] -> ... -> startNodeId.
+    const macroPath = reconstructPath(resStart.predecessors, startNodeId, endNodeId);
 
-    // console.timeEnd("DualGradient");
-    return { startMap, endMap };
+    return {
+        startMap: resStart.costs,
+        endMap: resEnd.costs,
+        sortedNodes: resEnd.sortedNodes,
+        macroPath: macroPath // This is the actual shortest path sequence
+    };
 };
 
 // Legacy alias to avoid breaking imports immediately, though we should update calls
