@@ -7,24 +7,24 @@ Un simulador de vehículos autónomos construido con React, Three.js y Cannon.js
 ### Prerrequisitos
 Asegúrate de tener instalado [Node.js](https://nodejs.org/).
 
-### Instalación
-Instala las dependencias del proyecto:
+### Instalación Rápida (Recomendado)
+Para configurar el entorno completo (instalar Node.js, Python, crear el entorno virtual y configurar Nginx localmente) ejecuta:
 ```bash
-npm install
+./setup_env.sh
 ```
 
 ### Ejecutar en Desarrollo
-Para iniciar el servidor de desarrollo y abrir el simulador:
+Para iniciar tanto el servidor backend (Django) como el frontend (Vite) simultáneamente:
 ```bash
-npm run dev
+./run_local.sh
 ```
-Luego abre tu navegador en la URL que aparece en la terminal (usualmente `http://localhost:5173`).
+Luego abre tu navegador en la URL asignada a tu servidor local (usualmente `http://comandovae.misitiowebpersonal.com.ar/` si usaste `setup_env.sh`, o `http://localhost:5173/dashboard/`).
 
-## 🛠 Comandos Disponibles
+## 🛠 Instalación y Ejecución Manual
 
--   `npm run dev`: Inicia el servidor de desarrollo.
--   `npm run build`: Compila el proyecto para producción.
--   `npm run preview`: Previsualiza la build de producción localmente.
+Si prefieres no usar los scripts automatizados:
+1.  **Frontend:** `npm install` y luego `npm run dev`
+2.  **Backend:** `python3 -m venv venv`, `source venv/bin/activate`, `pip install -r pps_backend/requirements.txt` y luego `python pps_backend/manage.py runserver`
 
 ## 📖 Documentación
 Para entender la estructura del proyecto y las reglas de desarrollo, consulta [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md).

@@ -6,5 +6,11 @@ export default defineConfig({
   base: "/dashboard/",
   server: {
     allowedHosts: ["comandovae", "comandovae.misitiowebpersonal.com.ar"],
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
   },
 });
