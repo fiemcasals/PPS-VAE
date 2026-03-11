@@ -6,7 +6,7 @@
  */
 
 export const buildTopology = (gridData, gridSize) => {
-    console.time("BuildTopology");
+    // console.time("BuildTopology");
 
     // 1. Identificar Celdas Candidatas (Carreteras y Destinos)
     const roadCells = [];
@@ -78,7 +78,7 @@ export const buildTopology = (gridData, gridSize) => {
         }
     });
 
-    console.log(`[Topología] Nodos Macro generados: ${Object.keys(macroNodes).length}`);
+    // console.log(`[Topología] Nodos Macro generados: ${Object.keys(macroNodes).length}`);
 
     // 3. Conectar Nodos (Construir Aristas)
     // Para cada nodo, buscar otros nodos macro alcanzables dentro de un radio máximo.
@@ -92,7 +92,7 @@ export const buildTopology = (gridData, gridSize) => {
         findNeighborsBFS(node, macroNodes, gridData, gridSize, CONNECTION_RADIUS);
     });
 
-    console.timeEnd("BuildTopology");
+    // console.timeEnd("BuildTopology");
     return macroNodes;
 };
 

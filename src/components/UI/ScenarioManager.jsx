@@ -33,7 +33,7 @@ export function ScenarioManager({ isOpen, onClose }) {
         });
 
         const first = sorted[0];
-        console.log("Auto-loading scenario:", first);
+        // console.log("Auto-loading scenario:", first);
         const data = loadScenario(first);
         if (data) {
             if (data.gridData) {

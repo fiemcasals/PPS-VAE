@@ -159,7 +159,7 @@ export function EditorToolbar({ onBackToHub }) {
         return;
       }
 
-      console.log(`[Editor] Calculating Macro Route from ${startNode.id} to ${endNode.id}...`);
+      // console.log(`[Editor] Calculating Macro Route from ${startNode.id} to ${endNode.id}...`);
 
       // 2. Calcular RUTA MACRO (Dijkstra)
       const { macroPath } = Topology.computeDualGradient(graph, startNode.id, endNode.id);
@@ -170,10 +170,10 @@ export function EditorToolbar({ onBackToHub }) {
         return;
       }
 
-      console.log(`[Editor] MacroPath found: ${macroPath.length} nodes.`);
+      // console.log(`[Editor] MacroPath found: ${macroPath.length} nodes.`);
 
       // MAURI: Calcular destinos intermedios (múltiplos de 4 según pedido)
-      const waypoints = macroPath.filter((id, index) => index > 0 && index < macroPath.length - 1 && index % 4 === 0);
+      const waypoints = macroPath.filter((id, index) => index > 0 && index < macroPath.length - 1 && index % 3 === 0);
 
       // 3. GENERAR ITINERARIO
       const newItinerary = [...waypoints, destKey];
@@ -183,7 +183,7 @@ export function EditorToolbar({ onBackToHub }) {
       useStore.getState().setActiveWaypoints(waypoints);
       useStore.getState().setActiveMacroPath(macroPath);
 
-      console.log(`[Editor] Generated Itinerary (${newItinerary.length} points):`, newItinerary);
+      // console.log(`[Editor] Generated Itinerary (${newItinerary.length} points):`, newItinerary);
 
       // 4. EJECUTAR USANDO LA LÓGICA DE ITINERARIOS
       handleItineraryDrive(newItinerary);
@@ -216,7 +216,7 @@ export function EditorToolbar({ onBackToHub }) {
     setExplored([]);
     setPath([]);
 
-    console.log(`[Itinerary] Starting execution of ${activeItinerary.length} legs.`);
+    // console.log(`[Itinerary] Starting execution of ${activeItinerary.length} legs.`);
 
     const { vehicleState } = useStore.getState();
     let currentStart = { x: vehicleState.x, z: vehicleState.z, heading: vehicleState.heading };
@@ -234,7 +234,7 @@ export function EditorToolbar({ onBackToHub }) {
         const [destX, destZ] = destKey.split(",").map(Number);
         const destObj = gridData[destKey] || { name: `Waypoint`, type: "waypoint" };
 
-        console.log(`[Itinerary] Leg ${i + 1}/${activeItinerary.length} -> Target: ${destKey}`);
+        // console.log(`[Itinerary] Leg ${i + 1}/${activeItinerary.length} -> Target: ${destKey}`);
 
         // --- LÓGICA MACRO PARA CADA TRAMO ---
         const startNode = Topology.findNearestGraphNode(graph, currentStart.x, currentStart.z);
@@ -276,8 +276,13 @@ export function EditorToolbar({ onBackToHub }) {
           gridData,
           GRID_SIZE,
           (exploredNodes) => setExplored((prev) => [...prev, ...exploredNodes]),
-          { graph, gradientMap: null }, // <--- MAURI: DESCONECTAR EL GRADIENTE PARA BUSQUEDA LOCAL
-          { base_heuristic_weight: config.base_heuristic_weight } // <--- MAURI: Usar el peso de la UI
+          {
+            base_heuristic_weight: config.base_heuristic_weight,
+            steering_cost: config.steering_cost,
+            steering_change_cost: config.steering_change_cost,
+            gear_switch_cost: config.gear_switch_cost,
+            backward_weight: config.backward_weight
+          }
         );
 
         if (result.path && result.path.length > 0) {
@@ -290,12 +295,11 @@ export function EditorToolbar({ onBackToHub }) {
 
           // Actualizar 'Start' para el siguiente tramo
           const lastPoint = result.path[result.path.length - 1];
-          let newHeading = currentStart.heading;
-          if (result.path.length >= 2) {
-            const prevPoint = result.path[result.path.length - 2];
-            newHeading = Math.atan2(lastPoint.x - prevPoint.x, lastPoint.z - prevPoint.z);
-          }
-          currentStart = { x: lastPoint.x, z: lastPoint.z, heading: newHeading };
+          currentStart = {
+            x: lastPoint.x,
+            z: lastPoint.z,
+            heading: lastPoint.theta // MAURI: Usar la orientación real calculada por A*
+          };
 
           // Si es un waypoint interno del grafo, lo marcamos para el visualizador
           if (!gridData[destKey] || gridData[destKey].type !== "destination") {
@@ -423,8 +427,7 @@ export function EditorToolbar({ onBackToHub }) {
         { x: startPoint.x, z: startPoint.z },
         gridData,
         cellSize,
-        null, // No progress callback
-        { graph: pathfindingGraph, gradientMap: weightedMap } // Pass the gradient!
+        null // No progress callback
       );
       approachPath = result.path;
     } else {
@@ -802,8 +805,7 @@ export function EditorToolbar({ onBackToHub }) {
                           { x: startPoint.x, z: startPoint.z }, // Ir al inicio de la grabación
                           gridData,
                           GRID_SIZE,
-                          (exploredNodes) => setExplored(exploredNodes),
-                          { graph: navGraph, gradientMap: useStore.getState().activeGradient?.total } // MAURI: Pass current gradient if exists
+                          (exploredNodes) => setExplored(exploredNodes)
                         );
 
                         if (result.path) {
@@ -1096,11 +1098,11 @@ function SettingsPanel({ onClose }) {
               <h5 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #eee" }}>🚗 Vehículo</h5>
               <div>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Ancho (m):</label>
-                <input type="number" step="0.1" name="vehicle_width" value={localConfig.vehicle_width || 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                <input type="number" step="0.1" name="vehicle_width" value={localConfig.vehicle_width ?? 1.5} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Largo (m):</label>
-                <input type="number" step="0.1" name="vehicle_length" value={localConfig.vehicle_length || 3.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                <input type="number" step="0.1" name="vehicle_length" value={localConfig.vehicle_length ?? 3.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
             </div>
           )}
@@ -1123,7 +1125,7 @@ function SettingsPanel({ onClose }) {
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Umbral Destino Final (Meta):</label>
-                <input type="number" step="0.1" name="arrival_threshold_final" value={localConfig.arrival_threshold_final || 1.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                <input type="number" step="0.1" name="arrival_threshold_final" value={localConfig.arrival_threshold_final ?? 1.0} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
             </div>
           )}
@@ -1140,14 +1142,14 @@ function SettingsPanel({ onClose }) {
               <div style={{ marginTop: "12px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>🚀 Codicia (Peso Distancia):</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_heuristic_weight || 50).toFixed(0)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_heuristic_weight ?? 50).toFixed(0)}</span>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "0.75em", color: "#888" }}>Lento</span>
                   <input
                     type="range" min="1" max="500" step="10"
                     name="base_heuristic_weight"
-                    value={localConfig.base_heuristic_weight || 50}
+                    value={localConfig.base_heuristic_weight ?? 50}
                     onChange={handleChange}
                     style={{ flex: 1, cursor: "pointer" }}
                   />
@@ -1155,41 +1157,41 @@ function SettingsPanel({ onClose }) {
                 </div>
               </div>
 
-              {/* PENALIZACIÓN DENSIDAD */}
-              <div style={{ marginTop: "12px" }}>
-                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                  <span>🧹 Limpieza (Densidad):</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.density_weight || 0).toFixed(1)}</span>
-                </label>
-                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                  <span style={{ fontSize: "0.75em", color: "#888" }}>Off</span>
-                  <input
-                    type="range" min="0" max="10" step="0.5"
-                    name="density_weight"
-                    value={localConfig.density_weight || 0}
-                    onChange={handleChange}
-                    style={{ flex: 1, cursor: "pointer" }}
-                  />
-                  <span style={{ fontSize: "0.75em", color: "#888" }}>Max</span>
-                </div>
-              </div>
-
               {/* COSTO GIRO */}
               <div style={{ marginTop: "12px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>📐 Costo Giro:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_cost || 5).toFixed(1)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_cost ?? 5).toFixed(1)}</span>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "0.75em", color: "#888" }}>Libre</span>
                   <input
-                    type="range" min="0" max="50" step="1"
+                    type="range" min="0" max="10" step="0.1"
                     name="steering_cost"
-                    value={localConfig.steering_cost || 5}
+                    value={localConfig.steering_cost ?? 1.0}
                     onChange={handleChange}
                     style={{ flex: 1, cursor: "pointer" }}
                   />
                   <span style={{ fontSize: "0.75em", color: "#888" }}>Recto</span>
+                </div>
+              </div>
+
+              {/* COSTO BRUSQUEDAD */}
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span>〰 Suavidad (Brusquedad):</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_change_cost ?? 1.0).toFixed(1)}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Brusco</span>
+                  <input
+                    type="range" min="0" max="10" step="0.1"
+                    name="steering_change_cost"
+                    value={localConfig.steering_change_cost ?? 1.0}
+                    onChange={handleChange}
+                    style={{ flex: 1, cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.75em", color: "#888" }}>Suave</span>
                 </div>
               </div>
 
@@ -1202,10 +1204,6 @@ function SettingsPanel({ onClose }) {
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Límite Iteraciones:</label>
                 <input type="number" step="1000" name="debug_iter_limit" value={localConfig.debug_iter_limit} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Brusquedad (Smoothness):</label>
-                <input type="number" step="0.1" name="steering_change_cost" value={localConfig.steering_change_cost} onChange={handleChange} style={{ width: "100%", padding: "5px", border: "1px solid #ccc", borderRadius: "4px" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "block", marginBottom: "3px" }}>Costo Cambios (D/R):</label>
@@ -1223,7 +1221,7 @@ function SettingsPanel({ onClose }) {
               <div>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Velocidad Máxima:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_speed || 0.4).toFixed(2)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.base_speed ?? 0.4).toFixed(2)}</span>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "0.8em" }}>🐢</span>
@@ -1233,7 +1231,7 @@ function SettingsPanel({ onClose }) {
                     max="3.0"
                     step="0.1"
                     name="base_speed"
-                    value={localConfig.base_speed || 0.4}
+                    value={localConfig.base_speed ?? 0.4}
                     onChange={handleChange}
                     style={{ flex: 1, cursor: "pointer" }}
                   />
@@ -1245,7 +1243,7 @@ function SettingsPanel({ onClose }) {
               <div style={{ marginTop: "12px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Agresividad Maniobras:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_kp || 5.0).toFixed(1)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.steering_kp ?? 5.0).toFixed(1)}</span>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ fontSize: "0.75em", color: "#888" }}>Suave</span>
@@ -1255,7 +1253,7 @@ function SettingsPanel({ onClose }) {
                     max="10.0"
                     step="0.5"
                     name="steering_kp"
-                    value={localConfig.steering_kp || 5.0}
+                    value={localConfig.steering_kp ?? 5.0}
                     onChange={handleChange}
                     style={{ flex: 1, cursor: "pointer" }}
                   />
@@ -1274,12 +1272,12 @@ function SettingsPanel({ onClose }) {
                 <div>
                   <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                     <span>🛣️ Rectas:</span>
-                    <span style={{ fontWeight: "bold", color: "#28a745" }}>{parseFloat(localConfig.lookahead_distance || 3.5).toFixed(1)}m</span>
+                    <span style={{ fontWeight: "bold", color: "#28a745" }}>{parseFloat(localConfig.lookahead_distance ?? 3.5).toFixed(1)}m</span>
                   </label>
                   <input
                     type="range" min="1.0" max="10.0" step="0.5"
                     name="lookahead_distance"
-                    value={localConfig.lookahead_distance || 3.5}
+                    value={localConfig.lookahead_distance ?? 3.5}
                     onChange={handleChange}
                     style={{ width: "100%", cursor: "pointer" }}
                   />
@@ -1289,12 +1287,12 @@ function SettingsPanel({ onClose }) {
                 <div style={{ marginTop: "6px" }}>
                   <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                     <span>🔄 Curvas:</span>
-                    <span style={{ fontWeight: "bold", color: "#fd7e14" }}>{parseFloat(localConfig.lookahead_curve || 1.5).toFixed(1)}m</span>
+                    <span style={{ fontWeight: "bold", color: "#fd7e14" }}>{parseFloat(localConfig.lookahead_curve ?? 1.5).toFixed(1)}m</span>
                   </label>
                   <input
                     type="range" min="0.5" max="5.0" step="0.25"
                     name="lookahead_curve"
-                    value={localConfig.lookahead_curve || 1.5}
+                    value={localConfig.lookahead_curve ?? 1.5}
                     onChange={handleChange}
                     style={{ width: "100%", cursor: "pointer" }}
                   />
@@ -1304,12 +1302,12 @@ function SettingsPanel({ onClose }) {
                 <div style={{ marginTop: "6px" }}>
                   <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                     <span>↩️ Maniobras (D↔R):</span>
-                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>{parseFloat(localConfig.lookahead_maneuver || 0.2).toFixed(2)}m</span>
+                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>{parseFloat(localConfig.lookahead_maneuver ?? 0.2).toFixed(2)}m</span>
                   </label>
                   <input
                     type="range" min="0.1" max="2.0" step="0.1"
                     name="lookahead_maneuver"
-                    value={localConfig.lookahead_maneuver || 0.2}
+                    value={localConfig.lookahead_maneuver ?? 0.2}
                     onChange={handleChange}
                     style={{ width: "100%", cursor: "pointer" }}
                   />
@@ -1328,12 +1326,12 @@ function SettingsPanel({ onClose }) {
                 <div>
                   <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                     <span>Peso Máximo Reversa:</span>
-                    <span style={{ fontWeight: "bold", color: "#dc3545" }}>{parseFloat(localConfig.backward_weight || 50).toFixed(0)}</span>
+                    <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.backward_weight ?? 50).toFixed(0)}</span>
                   </label>
                   <input
                     type="range" min="1" max="200" step="5"
                     name="backward_weight"
-                    value={localConfig.backward_weight || 50}
+                    value={localConfig.backward_weight ?? 50}
                     onChange={handleChange}
                     style={{ width: "100%", cursor: "pointer" }}
                   />
@@ -1343,12 +1341,12 @@ function SettingsPanel({ onClose }) {
                 <div style={{ marginTop: "6px" }}>
                   <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                     <span>Reversa Libre (antes de penalizar):</span>
-                    <span style={{ fontWeight: "bold", color: "#fd7e14" }}>{parseFloat(localConfig.backward_free_distance || 10).toFixed(0)}m</span>
+                    <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.backward_free_distance ?? 10).toFixed(1)}m</span>
                   </label>
                   <input
                     type="range" min="2" max="30" step="1"
                     name="backward_free_distance"
-                    value={localConfig.backward_free_distance || 10}
+                    value={localConfig.backward_free_distance ?? 10}
                     onChange={handleChange}
                     style={{ width: "100%", cursor: "pointer" }}
                   />
@@ -1363,12 +1361,12 @@ function SettingsPanel({ onClose }) {
               <div style={{ marginTop: "12px", borderTop: "1px dashed #ddd", paddingTop: "10px" }}>
                 <label style={{ fontSize: "0.8em", display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
                   <span>🎯 Umbral a la Meta:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.goal_tolerance || 2.0).toFixed(1)}m</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.goal_tolerance ?? 2.0).toFixed(1)}m</span>
                 </label>
                 <input
                   type="range" min="0.5" max="5.0" step="0.25"
                   name="goal_tolerance"
-                  value={localConfig.goal_tolerance || 2.0}
+                  value={localConfig.goal_tolerance ?? 2.0}
                   onChange={handleChange}
                   style={{ width: "100%", cursor: "pointer" }}
                 />
@@ -1423,38 +1421,39 @@ function SettingsPanel({ onClose }) {
               <div>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Suavizado Seguimiento:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_smoothing || 5.0).toFixed(1)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_smoothing ?? 5.0).toFixed(1)}</span>
                 </label>
-                <input type="range" min="1" max="20" step="0.5" name="camera_follow_smoothing" value={localConfig.camera_follow_smoothing || 5.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+                <input type="range" min="1" max="20" step="0.5" name="camera_follow_smoothing" value={localConfig.camera_follow_smoothing ?? 5.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Distancia Seguimiento:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_distance || 35).toFixed(0)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_follow_distance ?? 35).toFixed(0)}</span>
                 </label>
-                <input type="range" min="5" max="100" step="1" name="camera_follow_distance" value={localConfig.camera_follow_distance || 35} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+                <input type="range" min="5" max="100" step="1" name="camera_follow_distance" value={localConfig.camera_follow_distance ?? 35} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Suavizado Frontal:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_driver_smoothing || 8.0).toFixed(1)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_driver_smoothing ?? 8.0).toFixed(1)}</span>
                 </label>
-                <input type="range" min="1" max="20" step="0.5" name="camera_driver_smoothing" value={localConfig.camera_driver_smoothing || 8.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+                <input type="range" min="1" max="20" step="0.5" name="camera_driver_smoothing" value={localConfig.camera_driver_smoothing ?? 8.0} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ fontSize: "0.85em", display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                   <span>Suavizado Torreta:</span>
-                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_turret_smoothing || 0.2).toFixed(2)}</span>
+                  <span style={{ fontWeight: "bold", color: "#007bff" }}>{parseFloat(localConfig.camera_turret_smoothing ?? 0.2).toFixed(2)}</span>
                 </label>
-                <input type="range" min="0.05" max="1.0" step="0.05" name="camera_turret_smoothing" value={localConfig.camera_turret_smoothing || 0.2} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
+                <input type="range" min="0.05" max="1.0" step="0.05" name="camera_turret_smoothing" value={localConfig.camera_turret_smoothing ?? 0.2} onChange={handleChange} style={{ width: "100%", cursor: "pointer" }} />
               </div>
             </div>
           )}
         </div>
-      )}
+      )
+      }
 
 
 
-    </div>
+    </div >
   );
 }

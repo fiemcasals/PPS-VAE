@@ -25,7 +25,7 @@ export function WebcamFeed() {
                     // MAURI: Auto-detect ZED Camera
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const videoDevices = devices.filter(d => d.kind === "videoinput");
-                    console.log("[WebcamFeed] Available Cameras:", videoDevices);
+                    // console.log("[WebcamFeed] Available Cameras:", videoDevices);
 
                     let selectedDeviceId = null;
 
@@ -36,13 +36,13 @@ export function WebcamFeed() {
                     );
 
                     if (zedCamera) {
-                        console.log("[WebcamFeed] ZED Camera Found:", zedCamera.label);
+                        // console.log("[WebcamFeed] ZED Camera Found:", zedCamera.label);
                         selectedDeviceId = zedCamera.deviceId;
                     } else if (videoDevices.length > 1) {
                         // 2. Fallback: Use the LAST camera (often external USB)
                         // Integrated cameras are usually first.
                         const lastCamera = videoDevices[videoDevices.length - 1];
-                        console.log("[WebcamFeed] Using External Camera (Fallback):", lastCamera.label);
+                        // console.log("[WebcamFeed] Using External Camera (Fallback):", lastCamera.label);
                         selectedDeviceId = lastCamera.deviceId;
                     }
 
@@ -160,7 +160,7 @@ export function WebcamFeed() {
 
         // Update store
         if (minDist < 10.0) {
-            console.log("[WebcamFeed] Person detected! Distance:", minDist);
+            // console.log("[WebcamFeed] Person detected! Distance:", minDist);
         }
         useStore.getState().setNearestHumanDistance(minDist);
 

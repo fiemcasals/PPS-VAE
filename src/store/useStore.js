@@ -107,8 +107,9 @@ export const useStore = create((set) => ({
     arrival_threshold_final: 1.0,
     lookahead_distance: 1.2,
     backward_weight: 200.0, // Moved from root
-    steering_cost: 5.0, // Reduced from 20.0 to fix exploration flood
-    gear_switch_cost: 15.0, // Reduced from 50.0 to encourage maneuvering
+    steering_cost: 1.0, // Favor smooth turns
+    steering_change_cost: 1.0, // Penalize abrupt steering changes
+    gear_switch_cost: 50.0, // Discourage frequent D/R changes
     // Vehicle Dimensions (Sync with backend defaults)
     vehicle_width: 1.5,
     vehicle_length: 3.0,
@@ -121,10 +122,8 @@ export const useStore = create((set) => ({
     // Pathfinding / A* Config
     gradient_weight: 5.0,
     base_heuristic_weight: 50.0,
-    density_weight: 1.0, // MAURI: Exploration Penalty
     debug_iter_limit: 50000,
     step_size: 1.5,
-    steering_change_cost: 0.1,
 
     // Visualización Debug
     show_graph_debug: true,
@@ -149,7 +148,7 @@ export const useStore = create((set) => ({
         const data = await response.json();
         // Merge with existing config to preserve defaults for missing keys
         set((state) => ({ config: { ...state.config, ...data } }));
-        console.log("Config loaded from Backend:", data);
+        console.log(`[Backend] CONFIG LOADED: ${JSON.stringify(data, null, 2)}`);
       }
     } catch (e) {
       console.warn("Backend not available, using defaults.", e);
@@ -165,7 +164,7 @@ export const useStore = create((set) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newConfig),
       });
-      console.log("Config saved to Backend.");
+      console.log(`[Backend] CONFIG SAVED: ${JSON.stringify(newConfig)}`);
     } catch (e) {
       console.error("Failed to save config:", e);
     }

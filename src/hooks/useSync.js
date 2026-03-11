@@ -93,7 +93,7 @@ export function useSync(operatorMode) {
                                 } else {
                                     store.loadGridData(scenarioData);
                                 }
-                                console.log("[Sync] Escenario cargado:", shared.active_scenario);
+                                // console.log("[Sync] Escenario cargado:", shared.active_scenario);
                             }
                         }
                     } catch (e) {

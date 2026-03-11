@@ -140,12 +140,14 @@ export function AutonomousController() {
     if (window.vehicleDebugCounter === undefined) window.vehicleDebugCounter = 0;
     window.vehicleDebugCounter++;
     if (window.vehicleDebugCounter % 60 === 0) {
+      /*
       console.log(`[Pilot] Target Index: ${bestIndex}/${currentPath.length - 1}`);
       console.log(`[Pilot] Dist to Target: ${d.toFixed(2)}m (Threshold: ${arrivalThreshold}m)`);
       console.log(`[Pilot] Target Pos: {x: ${node.x.toFixed(2)}, z: ${node.z.toFixed(2)}}`);
       console.log(`[Pilot] Vehicle Pos: {x: ${vehicleState.x.toFixed(2)}, z: ${vehicleState.z.toFixed(2)}}`);
+      */
       if (nextNode) {
-        console.log(`[Pilot] Next Node: {x: ${nextNode.x.toFixed(2)}, z: ${nextNode.z.toFixed(2)}}`);
+        // console.log(`[Pilot] Next Node: {x: ${nextNode.x.toFixed(2)}, z: ${nextNode.z.toFixed(2)}}`);
       }
     }
 

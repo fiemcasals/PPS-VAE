@@ -11,7 +11,7 @@ export function useScenarios() {
                 if (response.ok) {
                     const data = await response.json();
                     setScenarios(data);
-                    console.log("Escenarios cargados desde el backend:", Object.keys(data));
+                    // console.log("Escenarios cargados desde el backend:", Object.keys(data));
                 }
             } catch (e) {
                 console.warn("No se pudieron cargar los escenarios:", e);

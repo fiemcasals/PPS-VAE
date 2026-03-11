@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../mibot"
+		},
+		{
+			"path": "../../../antigravity/IGSM.2"
+		}
+	],
+	"settings": {}
+}
