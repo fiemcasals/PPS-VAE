@@ -4,6 +4,7 @@ import Throttle from "./Throttle";
 import { Telemetry } from "./Telemetry";
 import { CameraToggle } from "./CameraToggle";
 import { ThresholdControl } from "./ThresholdControl";
+import { ESP32ControlPanel } from "./ESP32ControlPanel";
 
 const HUD = () => {
   return (
@@ -15,6 +16,7 @@ const HUD = () => {
       <Joystick />
       <Throttle />
       <ThresholdControl />
+      <ESP32ControlPanel />
     </div>
   );
 };
