@@ -6,17 +6,31 @@ import { useStore } from "../../store/useStore";
  * - Eje X: rotación horizontal (yaw) — 360° continuo
  * - Eje Y: elevación vertical (pitch) — limitada a 270°
  * Movimiento continuo: mientras se mantiene desplazado, la torreta sigue girando.
+ * 
+ * Props:
+ * - isFine: si es true, reduce las velocidades para un ajuste de precisión (ajuste fino).
+ * - side: "left" | "right" para posicionamiento en pantalla.
+ * - color: color principal en formato hexadecimal.
+ * - shadowColor: color para el box-shadow (rgba).
+ * - label: etiqueta flotante opcional.
  */
-export function TurretJoystick() {
+export function TurretJoystick({
+    isFine = false,
+    side = "left",
+    color = "#e94560",
+    shadowColor = "rgba(233, 69, 96, 0.2)",
+    label = ""
+}) {
     const [isDragging, setIsDragging] = useState(false);
     const [pos, setPos] = useState({ x: 0, y: 0 });
     const containerRef = useRef(null);
     const animFrameRef = useRef(null);
     const inputRef = useRef({ x: 0, y: 0 });
 
-    // Velocidad de rotación (radianes por frame)
-    const YAW_SPEED = 0.04;
-    const PITCH_SPEED = 0.025;
+    // Velocidades de rotación (radianes por frame)
+    // Reducimos a una fracción para el ajuste fino
+    const YAW_SPEED = isFine ? 0.005 : 0.04;
+    const PITCH_SPEED = isFine ? 0.003 : 0.025;
 
     // Loop de rotación continua
     const startRotationLoop = () => {
@@ -80,60 +94,82 @@ export function TurretJoystick() {
     };
 
     return (
-        <div
-            ref={containerRef}
-            onMouseDown={handleStart}
-            onMouseMove={handleMove}
-            onMouseUp={handleEnd}
-            onMouseLeave={handleEnd}
-            onTouchStart={handleStart}
-            onTouchMove={handleMove}
-            onTouchEnd={handleEnd}
-            style={{
-                position: "fixed",
-                bottom: "40px",
-                left: "40px",
-                width: "140px",
-                height: "140px",
-                backgroundColor: "rgba(0, 0, 0, 0.5)",
-                borderRadius: "50%",
-                border: "3px solid #e94560",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                touchAction: "none",
-                pointerEvents: "auto",
-                zIndex: 100000,
-                boxShadow: "0 0 20px rgba(233, 69, 96, 0.2)",
-            }}
-        >
-            {/* Guías de ejes */}
-            <div style={{
-                position: "absolute", width: "1px", height: "80%",
-                backgroundColor: "rgba(233, 69, 96, 0.15)",
-            }} />
-            <div style={{
-                position: "absolute", width: "80%", height: "1px",
-                backgroundColor: "rgba(233, 69, 96, 0.15)",
-            }} />
+        <>
+            {label && (
+                <div style={{
+                    position: "fixed",
+                    bottom: "190px",
+                    [side]: "40px",
+                    width: "140px",
+                    textAlign: "center",
+                    color: color,
+                    fontFamily: "monospace",
+                    fontSize: "0.65rem",
+                    fontWeight: "bold",
+                    letterSpacing: "1.5px",
+                    textShadow: `0 0 8px ${color}`,
+                    pointerEvents: "none",
+                    zIndex: 100000
+                }}>
+                    {label}
+                </div>
+            )}
 
-            {/* Centro */}
-            <div style={{
-                position: "absolute", width: "4px", height: "4px",
-                backgroundColor: "rgba(233, 69, 96, 0.3)", borderRadius: "50%",
-            }} />
+            <div
+                ref={containerRef}
+                onMouseDown={handleStart}
+                onMouseMove={handleMove}
+                onMouseUp={handleEnd}
+                onMouseLeave={handleEnd}
+                onTouchStart={handleStart}
+                onTouchMove={handleMove}
+                onTouchEnd={handleEnd}
+                style={{
+                    position: "fixed",
+                    bottom: "40px",
+                    [side]: "40px",
+                    width: "140px",
+                    height: "140px",
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    borderRadius: "50%",
+                    border: `3px solid ${color}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    touchAction: "none",
+                    pointerEvents: "auto",
+                    zIndex: 100000,
+                    boxShadow: `0 0 20px ${shadowColor}`,
+                }}
+            >
+                {/* Guías de ejes */}
+                <div style={{
+                    position: "absolute", width: "1px", height: "80%",
+                    backgroundColor: `rgba(${isFine ? '245, 176, 65' : '233, 69, 96'}, 0.15)`,
+                }} />
+                <div style={{
+                    position: "absolute", width: "80%", height: "1px",
+                    backgroundColor: `rgba(${isFine ? '245, 176, 65' : '233, 69, 96'}, 0.15)`,
+                }} />
 
-            {/* Thumb */}
-            <div style={{
-                width: "55px", height: "55px",
-                backgroundColor: "#e94560",
-                borderRadius: "50%",
-                transform: `translate(${pos.x}px, ${pos.y}px)`,
-                boxShadow: "0 0 25px #e94560",
-                cursor: "grab",
-                transition: isDragging ? "none" : "transform 0.2s ease-out",
-                pointerEvents: "none",
-            }} />
-        </div>
+                {/* Centro */}
+                <div style={{
+                    position: "absolute", width: "4px", height: "4px",
+                    backgroundColor: `rgba(${isFine ? '245, 176, 65' : '233, 69, 96'}, 0.3)`, borderRadius: "50%",
+                }} />
+
+                {/* Thumb */}
+                <div style={{
+                    width: "55px", height: "55px",
+                    backgroundColor: color,
+                    borderRadius: "50%",
+                    transform: `translate(${pos.x}px, ${pos.y}px)`,
+                    boxShadow: `0 0 25px ${color}`,
+                    cursor: "grab",
+                    transition: isDragging ? "none" : "transform 0.2s ease-out",
+                    pointerEvents: "none",
+                }} />
+            </div>
+        </>
     );
 }

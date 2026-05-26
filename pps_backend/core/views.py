@@ -15,6 +15,10 @@ def login_view(request):
         if user is not None:
             login(request, user)
             # Redirigir al dashboard del frontend
+            host = request.get_host()
+            if "8000" in host:
+                hostname = host.split(":")[0]
+                return redirect(f"http://{hostname}:5173/dashboard/")
             return redirect("/dashboard/")
         else:
             return render(request, "core/login.html", {"error": "Credenciales inválidas"})

@@ -20,6 +20,13 @@ Para iniciar tanto el servidor backend (Django) como el frontend (Vite) simultá
 ```
 Luego abre tu navegador en la URL asignada a tu servidor local (usualmente `http://comandovae.misitiowebpersonal.com.ar/` si usaste `setup_env.sh`, o `http://localhost:5173/dashboard/`).
 
+## 🔑 Credenciales de Acceso Local
+
+Para acceder al sistema e iniciar sesión en el panel del simulador, utiliza las siguientes credenciales predeterminadas:
+
+*   **Usuario:** `admin`
+*   **Contraseña:** `admin123`
+
 ## 🛠 Instalación y Ejecución Manual
 
 Si prefieres no usar los scripts automatizados:

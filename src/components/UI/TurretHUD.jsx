@@ -17,7 +17,17 @@ export function TurretHUD({ onBack }) {
 
     return (
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <TurretJoystick />
+            {/* Joystick Izquierdo: Control Estándar */}
+            <TurretJoystick side="left" label="MIRA ESTÁNDAR" />
+
+            {/* Joystick Derecho: Ajuste Fino */}
+            <TurretJoystick 
+                isFine={true} 
+                side="right" 
+                color="#f5b041" 
+                shadowColor="rgba(245, 176, 65, 0.2)" 
+                label="AJUSTE FINO" 
+            />
 
             {/* Botón Volver (Lápiz) */}
             <button
@@ -58,7 +68,7 @@ export function TurretHUD({ onBack }) {
 
             {/* Indicador de ángulos */}
             <div style={{
-                position: "fixed", bottom: 40, right: 40,
+                position: "fixed", bottom: 225, right: 40,
                 background: "rgba(0,0,0,0.6)", border: "1px solid rgba(233,69,96,0.3)",
                 borderRadius: 12, padding: "16px 24px",
                 color: "#fff", fontFamily: "monospace", fontSize: "0.85rem",
