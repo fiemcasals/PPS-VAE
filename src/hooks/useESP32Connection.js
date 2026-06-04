@@ -5,7 +5,7 @@ import { useStore } from "../store/useStore";
  * Hook de React para controlar la conexión en tiempo real con el auto real (ESP32).
  * Mapea los controles de Zustand a la sintaxis del microcontrolador STM32 y envía comandos a 25Hz.
  */
-export function useESP32Connection(esp32Ip = "192.168.0.50") {
+export function useESP32Connection(esp32Ip = "192.168.0.20") {
     const [status, setStatus] = useState("DISCONNECTED"); // "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "ERROR"
     const [latency, setLatency] = useState(0);
     const [txData, setTxData] = useState({ angle: 90, ac: 0 });

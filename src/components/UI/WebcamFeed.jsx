@@ -7,6 +7,8 @@ export function WebcamFeed() {
     const detectionThresholds = useStore((state) => state.detectionThresholds);
     const isDetectionEnabled = useStore((state) => state.isDetectionEnabled); // MAURI: Needed for background check
     const isAutonomous = useStore((state) => state.isAutonomous);
+    const selectedCameraId = useStore((state) => state.selectedCameraId);
+    const setAvailableCameras = useStore((state) => state.setAvailableCameras);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [error, setError] = useState(null);
@@ -25,30 +27,35 @@ export function WebcamFeed() {
                     // MAURI: Auto-detect ZED Camera
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const videoDevices = devices.filter(d => d.kind === "videoinput");
+                    setAvailableCameras(videoDevices);
                     // console.log("[WebcamFeed] Available Cameras:", videoDevices);
 
-                    let selectedDeviceId = null;
+                    let finalDeviceId = null;
 
-                    // 1. Search for "ZED" or "Stereo"
-                    const zedCamera = videoDevices.find(d =>
-                        d.label.toLowerCase().includes("zed") ||
-                        d.label.toLowerCase().includes("stereo")
-                    );
+                    if (selectedCameraId) {
+                        // User manually selected a camera from the UI
+                        finalDeviceId = selectedCameraId;
+                    } else {
+                        // 1. Search for "ZED" or "Stereo"
+                        const zedCamera = videoDevices.find(d =>
+                            d.label.toLowerCase().includes("zed") ||
+                            d.label.toLowerCase().includes("stereo")
+                        );
 
-                    if (zedCamera) {
-                        // console.log("[WebcamFeed] ZED Camera Found:", zedCamera.label);
-                        selectedDeviceId = zedCamera.deviceId;
-                    } else if (videoDevices.length > 1) {
-                        // 2. Fallback: Use the LAST camera (often external USB)
-                        // Integrated cameras are usually first.
-                        const lastCamera = videoDevices[videoDevices.length - 1];
-                        // console.log("[WebcamFeed] Using External Camera (Fallback):", lastCamera.label);
-                        selectedDeviceId = lastCamera.deviceId;
+                        if (zedCamera) {
+                            finalDeviceId = zedCamera.deviceId;
+                        } else if (videoDevices.length > 1) {
+                            // 2. Fallback: Use the LAST camera (often external USB)
+                            const lastCamera = videoDevices[videoDevices.length - 1];
+                            finalDeviceId = lastCamera.deviceId;
+                        } else if (videoDevices.length === 1) {
+                            finalDeviceId = videoDevices[0].deviceId;
+                        }
                     }
 
                     const constraints = {
                         video: {
-                            deviceId: selectedDeviceId ? { exact: selectedDeviceId } : undefined,
+                            deviceId: finalDeviceId ? { exact: finalDeviceId } : undefined,
                             width: { ideal: 1920 }, // ZED likes HD
                             height: { ideal: 1080 }
                         },
@@ -84,7 +91,7 @@ export function WebcamFeed() {
                 stream.getTracks().forEach((track) => track.stop());
             }
         };
-    }, [cameraMode, isAutonomous, isDetectionEnabled]);
+    }, [cameraMode, isAutonomous, isDetectionEnabled, selectedCameraId, setAvailableCameras]);
 
     // Dibujar Cajas
     // MAURI: Logic for Stereo Vision (Bifocal)

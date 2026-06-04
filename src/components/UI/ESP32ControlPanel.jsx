@@ -4,7 +4,7 @@ import { useStore } from "../../store/useStore";
 
 export function ESP32ControlPanel() {
     const [ip, setIp] = useState(() => {
-        return localStorage.getItem("esp32_ip") || "192.168.0.50";
+        return localStorage.getItem("esp32_ip") || "192.168.0.20";
     });
     
     const { status, latency, txData, connect, disconnect } = useESP32Connection(ip);

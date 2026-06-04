@@ -31,6 +31,13 @@ export const useStore = create((set) => ({
   safetyWarningAck: false,
   safetyAlertAck: false, // MAURI: Track if user acknowledged CURRENT danger
 
+  // --- CAMERA SELECTION ---
+  availableCameras: [],
+  setAvailableCameras: (cameras) => set({ availableCameras: cameras }),
+  selectedCameraId: null,
+  setSelectedCameraId: (id) => set({ selectedCameraId: id }),
+
+
   updateSafetyStatus: (distance) => set((state) => {
     // MAURI: Only process safety braking/alerts IF in autonomous mode
     if (!state.isAutonomous) {
