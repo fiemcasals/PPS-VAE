@@ -50,7 +50,7 @@ class PathTracker {
     let arrivalThreshold = 2.0;
 
     if (nextNode && nextNode.direction !== node.direction) {
-      arrivalThreshold = 0.5;
+      arrivalThreshold = (bestIndex === 0) ? 2.0 : 0.5;
     }
 
     if (d < arrivalThreshold && bestIndex < this.path.length - 1) {
@@ -90,9 +90,9 @@ class PathTracker {
 
     // 2. Lookahead logic
     const isManeuver = nextNode && nextNode.direction !== node.direction;
-    let lookaheadDist = isManeuver ? 0.2 : 1.8;
+    let lookaheadDist = isManeuver ? 0.2 : Math.max(3.0, Math.abs(speed) * 0.4 + 2.0);
     if (this.currentIndex < 5) {
-      lookaheadDist = 1.5;
+      lookaheadDist = Math.max(lookaheadDist, 1.5);
     }
 
     let lookaheadIndex = this.currentIndex;
@@ -134,8 +134,7 @@ class PathTracker {
     while (angleError > Math.PI) angleError -= 2 * Math.PI;
     while (angleError < -Math.PI) angleError += 2 * Math.PI;
 
-    const Kp = effectiveDir === -1 ? -6.0 : -5.0;
-    let newSteer = angleError * Kp;
+    let newSteer = -Math.atan2(2.0 * this.wheelbase * Math.sin(angleError), lookaheadDist);
     if (effectiveDir === -1) {
       newSteer *= -1;
     }
@@ -222,13 +221,15 @@ wss.on('connection', (ws) => {
       for (let r = 0; r < tiles.length; r++) {
         for (let c = 0; c < tiles[r].length; c++) {
           const tile_type = tiles[r][c];
-          const cx = c * cellSize + cellSize / 2;
-          const cz = r * cellSize + cellSize / 2;
+          const cx = c * cellSize;
+          const cz = r * cellSize;
 
           let pf_type = 'obstacle';
-          if (tile_type === 'caminable' || tile_type === 'spawn_point' || tile_type === 'road') {
+          const t = typeof tile_type === 'string' ? tile_type.toLowerCase() : tile_type;
+
+          if (t === 'caminable' || t === 'spawn_point' || t === 'road' || t === 'peso_3_4' || t === 1 || t === 2 || t === 3) {
             pf_type = 'road';
-          } else if (tile_type === 'punto_interes' || tile_type === 'objetivo' || tile_type === 'destination') {
+          } else if (t === 'punto_interes' || t === 'objetivo' || t === 'destination' || t === 4 || t === 6) {
             pf_type = 'destination';
           }
 
@@ -250,8 +251,7 @@ wss.on('connection', (ws) => {
 
           ws.send(JSON.stringify({
             type: 'path_calculated',
-            path: result.path,
-            explored: result.explored
+            path: result.path
           }));
         } else {
           console.log('[PPS-VAE Logic Server] No path found.');
@@ -263,10 +263,23 @@ wss.on('connection', (ws) => {
       }
     }
 
+    else if (type === 'set_path') {
+      const { path } = data;
+      if (path && Array.isArray(path)) {
+        console.log(`[PPS-VAE Logic Server] Path overridden by client (shifted/smoothed lane, ${path.length} points).`);
+        console.log("First 3 points direction:", path.slice(0, 3).map(p => p.direction));
+        tracker.setPath(path);
+      }
+    }
+
     else if (type === 'telemetry') {
       const { x, z, heading, speed } = data;
       const orders = tracker.update(x, z, heading, speed);
       
+      if (Math.random() < 0.01) {
+        console.log(`[Telemetry] x=${x.toFixed(2)}, z=${z.toFixed(2)}, speed=${speed.toFixed(2)} | Orders: steer=${orders.steering.toFixed(2)}, throttle=${orders.throttle.toFixed(2)}, brake=${orders.brake.toFixed(2)}, completed=${orders.completed || false}`);
+      }
+
       ws.send(JSON.stringify({
         type: 'orders',
         ...orders

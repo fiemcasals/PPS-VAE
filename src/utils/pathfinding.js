@@ -1,15 +1,14 @@
 import { VEHICLE_CONFIG } from "../components/Vehicle/Physics/vehicleConfig.js";
 
 const ANGLE_RES = Math.PI / 16; //la franja de angulos que va a tomar como uno solo -> de  10grados a 20 grados lo toma como lo mismo.
-// MAURI: "Conservative Planning": Limitamos el "cerebro" al 40% del volante (0.32 rad).
-// El auto FÍSICAMENTE puede girar 0.8, pero el PLAN nunca pedirá más de 0.32.
-// Esto fuerza curvas mucho más amplias (radios grandes) que el límite físico.
-const STEER_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
-const STEP_SIZE = 2; // MAURI: Pasos más cortos para mayor precisión en curvas
+// Modificado: Permitimos giros de hasta 1.0 (máximo de dirección de 0.8 rad) para maniobrar en calles angostas (4m)
+// y reducimos el tamaño del paso para mejorar la precisión de giro en las esquinas.
+const STEER_STEPS = [-1.0, -0.6, -0.3, 0, 0.3, 0.6, 1.0];
+const STEP_SIZE = 1.5;
 
 // MAURI: Factor de peso BASE para la Heurística (h).
 // Aumentaremos este valor dinámicamente si la búsqueda tarda mucho.
-const BASE_HEURISTIC_WEIGHT = 2.0;
+const BASE_HEURISTIC_WEIGHT = 4.0;
 
 class Node {
   constructor(x, z, theta, g, h, parent = null, steer = 0, dir = 1, weight = BASE_HEURISTIC_WEIGHT) {
@@ -34,8 +33,8 @@ class Node {
 // - 0.9: PATHFINDING (Muy seguro, lejos de paredes)
 // - 0.6: SMOOTHING (Permite cortar un poco la "zona de seguridad" para hacer curvas)
 const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99) => {
-  const hw = VEHICLE_CONFIG.WIDTH * marginFactor;
-  const hl = VEHICLE_CONFIG.LENGTH * 0.6;
+  const hw = (VEHICLE_CONFIG.WIDTH / 2) * marginFactor;
+  const hl = (VEHICLE_CONFIG.LENGTH / 2) * 0.9;
   const s = Math.sin(theta),
     c = Math.cos(theta); //en base al angulo, calcula la magnitud en x y z de los puntos del rectangulo que forma el auto
   const corners = [
@@ -47,8 +46,8 @@ const isCollision = (x, z, theta, gridData, cellSize, marginFactor = 0.99) => {
   ];
   // Check points
   for (const p of corners) {
-    const cx = Math.floor(p.x / cellSize) * cellSize + cellSize / 2;
-    const cz = Math.floor(p.z / cellSize) * cellSize + cellSize / 2;
+    const cx = Math.round(p.x / cellSize) * cellSize;
+    const cz = Math.round(p.z / cellSize) * cellSize;
     const cell = gridData[`${cx},${cz}`];
 
     // Si no existe celda o no es camino/destino, hay colisión
@@ -129,7 +128,15 @@ export async function findPathAsync(
     openSet.sort((a, b) => a.f - b.f);
     const curr = openSet.shift();
 
-    const stateKey = `${Math.round(curr.x)},${Math.round(curr.z)},${Math.round(curr.theta / ANGLE_RES)}`;
+    if (iter === 0) {
+      console.log(`[Buscador] Iniciando A* desde (${curr.x.toFixed(2)}, ${curr.z.toFixed(2)}) con rumbo ${curr.theta.toFixed(4)}. Destino: (${goal.x.toFixed(2)}, ${goal.z.toFixed(2)})`);
+    }
+
+    let normalizedTheta = curr.theta;
+    while (normalizedTheta > Math.PI) normalizedTheta -= 2 * Math.PI;
+    while (normalizedTheta <= -Math.PI) normalizedTheta += 2 * Math.PI;
+    const angleKey = Math.round(normalizedTheta / ANGLE_RES);
+    const stateKey = `${Math.round(curr.x)},${Math.round(curr.z)},${angleKey}`;
     if (closedSet.has(stateKey) && closedSet.get(stateKey) <= curr.g) continue;
     closedSet.set(stateKey, curr.g);
 
@@ -139,8 +146,9 @@ export async function findPathAsync(
     const distToGoal = Math.hypot(curr.x - goal.x, curr.z - goal.z);
 
     // CONDICIÓN DE ÉXITO:
-    // Si estamos muy cerca del centro de la celda objetivo (0.5 del tamaño de celda).
-    if (distToGoal < cellSize * 0.5) {
+    // Reducimos a 0.8 metros para asegurar que el auto llegue bien adentro de la celda objetivo
+    // y se registre correctamente en la celda destino al redondear coordenadas.
+    if (distToGoal < 0.8) {
       // Reconstruimos el camino yendo hacia atrás desde el nodo final hasta el inicio
       const path = [];
       let t = curr;
@@ -195,14 +203,38 @@ export async function findPathAsync(
       const nextX = curr.x + STEP_SIZE * d * Math.sin(curr.theta);
       const nextZ = curr.z + STEP_SIZE * d * Math.cos(curr.theta);
 
-      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.9))
+      if (iter === 0) {
+        const collision = isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.85);
+        console.log(`  Candidato: d=${d}, s=${s} -> pos=(${nextX.toFixed(2)}, ${nextZ.toFixed(2)}), colision=${collision}`);
+        if (collision) {
+          const hw = VEHICLE_CONFIG.WIDTH * 0.85;
+          const hl = VEHICLE_CONFIG.LENGTH * 0.6;
+          const s_val = Math.sin(nextTheta), c_val = Math.cos(nextTheta);
+          const corners = [
+            { x: nextX + (hl * c_val - hw * s_val), z: nextZ + (hl * s_val + hw * c_val) },
+            { x: nextX + (hl * c_val + hw * s_val), z: nextZ + (hl * s_val - hw * c_val) },
+            { x: nextX - (hl * c_val + hw * s_val), z: nextZ - (hl * s_val - hw * c_val) },
+            { x: nextX - (hl * c_val - hw * s_val), z: nextZ - (hl * s_val + hw * c_val) },
+          ];
+          for (let idx = 0; idx < corners.length; idx++) {
+            const p = corners[idx];
+            const cx = Math.round(p.x / cellSize) * cellSize;
+            const cz = Math.round(p.z / cellSize) * cellSize;
+            const cell = gridData[`${cx},${cz}`];
+            console.log(`    Esquina ${idx}: pos=(${p.x.toFixed(2)}, ${p.z.toFixed(2)}) -> celda=(${cx}, ${cz}), tipo=${cell ? cell.type : 'undefined'}`);
+          }
+        }
+      }
+
+      if (isCollision(nextX, nextZ, nextTheta, gridData, cellSize, 0.85))
         continue;
 
       // MAURI: "Tunnel Vision Config"
       // Steering Cost: Subimos penalización (20) para que PREFIERA curvas suaves (0.4),
       // pero USE curvas cerradas (0.8) antes que ponerse a hacer maniobras locas.
+      // Modificado: Penalizamos fuertemente la marcha atrás (factor 300.0) para que solo haga pocos metros.
       const moveCost =
-        (d === 1 ? STEP_SIZE : STEP_SIZE * 50.0) + Math.abs(s) * 20;
+        (d === 1 ? STEP_SIZE : STEP_SIZE * 300.0) + Math.abs(s) * 20;
       const nextG = curr.g + moveCost;
 
       // Switch Cost: Penalización por cambio de marcha (Drive <-> Reverse).
@@ -256,13 +288,27 @@ function smoothPath(path, gridData, cellSize) {
       const curr = smoothed[i];
       const next = smoothed[i + 1];
 
-      // MAURI: PROTECCIÓN DE MANIOBRAS (Cusps)
-      // Si hay un cambio de dirección en este segmento (Reverse <-> Forward), NO suavizar.
-      // Esto preserva el pico "V" necesario para la maniobra de 3 puntos.
+      // MAURI: PROTECCIÓN DE MANIOBRAS (Cusps) y ESQUINAS
+      // Si hay un cambio de dirección en este segmento (Reverse <-> Forward) o es una esquina física, NO suavizar.
+      // Esto preserva el pico "V" y mantiene los nodos exactamente en las esquinas.
       const directionChanged =
         prev.direction !== curr.direction || curr.direction !== next.direction;
 
-      if (directionChanged) {
+      const dx1 = curr.x - prev.x;
+      const dz1 = curr.z - prev.z;
+      const dx2 = next.x - curr.x;
+      const dz2 = next.z - curr.z;
+      const len1 = Math.hypot(dx1, dz1);
+      const len2 = Math.hypot(dx2, dz2);
+      let isCorner = false;
+      if (len1 > 0.01 && len2 > 0.01) {
+        const dot = (dx1 * dx2 + dz1 * dz2) / (len1 * len2);
+        if (dot < 0.9) {
+          isCorner = true;
+        }
+      }
+
+      if (directionChanged || isCorner) {
         continue; // Saltamos suavizado para mantener el vértice exacto
       }
 

@@ -2,9 +2,9 @@
 const LENGTH = 3.0;
 
 export const VEHICLE_CONFIG = {
-  WIDTH: 1.5, // Tu pedido
+  WIDTH: 2.0,
   LENGTH: LENGTH,
-  WHEELBASE: LENGTH * 0.8, // Proporcional al largo
+  WHEELBASE: 2.0,
   MAX_SPEED: 10.0,
   MAX_REVERSE_SPEED: 4.0,
   ACCELERATION: 4.0,
